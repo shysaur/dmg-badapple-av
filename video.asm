@@ -194,6 +194,7 @@ VBlank: push af
         
         xor a
         ldh [$42],a
+        dec a
         ldh [HBlankSCY],a
         ld a,$18
         ldh [HBlankSelfmodJump],a
@@ -304,7 +305,7 @@ HBT_cdest:
         inc de
         
 HBT_scy:
-        ld a,$00
+        ld a,$FF
         ldh [$42],a
         
         ld a,l
