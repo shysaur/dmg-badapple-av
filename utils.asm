@@ -154,6 +154,37 @@ MakePictureRectangle2:
         
         
         
+        ;C=rect w
+        ;B=rect h
+        ;HL=dest in VRAM
+        ;E=fill start byte
+        ;Layout:  0  3  6 ...
+        ;         1  4  7
+        ;         2  5  8
+MakePictureRectangle3:
+        ld d,b
+.wlh:   push bc
+        push hl
+        ld a,e
+.wloop: ld [hl+],a
+        add b
+        dec c
+        jr nz,.wloop
+        pop hl
+        pop bc
+        inc e
+        
+        ld a,l
+        add $20
+        ld l,a
+        jr nc,.noc
+        inc h
+.noc:   dec d
+        jr nz,.wlh
+        ret
+        
+        
+        
 Fill:   inc c
         dec c
         jr z,.fillb

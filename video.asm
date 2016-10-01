@@ -1,25 +1,30 @@
 
 
         INCLUDE "video.inc"
+        INCLUDE "utils.inc"
         
+
+        SECTION "main_var", HRAM
+        
+Cycle:  DS 1
+
 
         SECTION "stack", BSS[$CF00]
         
         DS 256
 Stack:
-
         
         ;  Interrupt vectors
         SECTION "ih_vbl",HOME[$40]
         
 VBlankInt:
-        reti
+        jp VBlank
 
         
         SECTION "ih_lcdc",HOME[$48]
         
 LCDCInt:     
-        reti    
+        jp HBlank   
         
         
         SECTION "ih_timer",HOME[$50]
@@ -98,8 +103,223 @@ Initialize:
         xor a
         ldh [$40],a
         
-.l:     jr .l
-
+        ld de,HBlank
+        ld hl,HBlankTemplate
+        ld bc,HBT_end - HBlankTemplate
+        call Copy
         
+        ld c,20
+        ld b,9
+        ld e,0
+        ld hl,$9800
+        call MakePictureRectangle3
+        
+        ld c,20
+        ld b,9
+        ld e,$C0
+        ld hl,$9C00
+        call MakePictureRectangle3
+        
+        ld a,Frame & $FF
+        ld [CurSrcAddr],a
+        ld a,Frame >> 8
+        ld [CurSrcAddr+1],a
+        
+        ld a,$00
+        ld [CurDestAddr],a
+        ld a,$80
+        ld [CurDestAddr+1],a
+        
+        ld a,4
+        ldh [Cycle],a
+        
+        ld a,$CC
+        ldh [$47],a
+        ld a,$08
+        ldh [$41],a
+        ld a,$03
+        ldh [$FF],a
+        xor a
+        ldh [$0F],a
+        ei
+        
+        ld a,$91
+        ldh [$40],a
+                
+.l:     halt
+        jr .l
+        
+        
+        
+VBlank: push af
+        push de
+        push hl
+        
+        ld hl,CurDestAddr
+        ld a,[hl+]
+        ld e,a
+        ld d,[hl]
+        ld l,CurSrcAddr & $FF
+        ld a,[hl+]
+        ld h,[hl]
+        ld l,a
+        
+        REPT 36
+        ld a,[hl+]
+        ld [de],a
+        inc e
+        ld a,[hl+]
+        ld [de],a
+        inc e
+        ld a,[hl+]
+        ld [de],a
+        inc e
+        ld a,[hl+]
+        ld [de],a
+        inc de
+        ENDR
+        
+        xor a
+        ldh [$42],a
+        ldh [HBlankSCY],a
+        ld a,$18
+        ldh [HBlankSelfmodJump],a
+        
+        ld c,Cycle & $FF
+        ld a,[c]
+        dec a
+        ld [c],a
+        jr z,.nextcycle
+        
+        rra
+        jr c,.nochgpal
+        ld a,$F0
+        ldh [$47],a
+
+.nochgpal:        
+        ld a,l
+        ldh [CurSrcAddr],a
+        ld a,h
+        ldh [CurSrcAddr+1],a
+        ld hl,CurDestAddr
+        ld a,e
+        ld [hl+],a
+        ld [hl],d
+        
+        pop hl
+        pop de
+        pop af
+        reti
+        
+.nextcycle:
+        ld a,$CC
+        ldh [$47],a
+        ld hl,$FF40
+        ld a,$18
+        xor [hl]
+        ld [hl],a
+        
+        ld a,Frame & $FF
+        ld [CurSrcAddr],a
+        ld a,Frame >> 8
+        ld [CurSrcAddr+1],a
+        
+        ld l,CurDestAddr & $FF
+        xor a
+        ld [hl+],a
+        ld a,[hl]
+        cp $90
+        sbc a
+        and $0C
+        or $80
+        ld [hl],a
+        
+        ld a,4
+        ldh [Cycle],a
+        
+        pop hl
+        pop de
+        pop af
+        reti
+        
+
+HBlankTemplate:
+        push af
+        push de
+        push hl
+        
+HBT_csrc:
+        ld hl,60000
+HBT_cdest:
+        ld de,60000
+        
+        ld a,[hl+]
+        ld [de],a
+        inc e
+        ld a,[hl+]
+        ld [de],a
+        inc e
+        ld a,[hl+]
+        ld [de],a
+        inc e
+        ld a,[hl+]
+        ld [de],a
+        inc de
+        
+HBT_scy:
+        ld a,$00
+        ldh [$42],a
+        
+        ld a,l
+        ldh [CurSrcAddr],a
+        ld a,h
+        ldh [CurSrcAddr+1],a
+        ld hl,CurDestAddr
+        ld a,e
+        ld [hl+],a
+        ld [hl],d
+        
+HBT_endj:
+        jr .end
+        ld hl,HBlankSCY
+        dec [hl]
+        ld l,HBlankSelfmodJump & $FF
+        ld [hl],$18
+        jr .end2
+.end:   ld a,$3E
+        ldh [HBlankSelfmodJump],a
+.end2:  pop hl
+        pop de
+        pop af
+        reti
+HBT_end:
+        
+        
+RealHBlankProcSize          EQU HBT_end - HBlankTemplate
+HBlankCurSrcAddressOffset   EQU HBT_csrc - HBlankTemplate + 1
+HBlankCurDestAddressOffset  EQU HBT_cdest - HBlankTemplate + 1
+HBlankSCYOffset             EQU HBT_scy - HBlankTemplate + 1
+HBlankSelfmodJumpOffset     EQU HBT_endj - HBlankTemplate
+
+
+        SECTION "hblank_copier", HRAM
+    
+HBlank:           DS HBlankCurSrcAddressOffset
+CurSrcAddr:       DS 2
+                  DS HBlankCurDestAddressOffset - HBlankCurSrcAddressOffset - 2
+CurDestAddr:      DS 2
+                  DS HBlankSCYOffset - HBlankCurDestAddressOffset - 2
+HBlankSCY:        DS 1
+                  DS HBlankSelfmodJumpOffset - HBlankSCYOffset - 1
+HBlankSelfmodJump:DS 1
+                  DS RealHBlankProcSize - HBlankSelfmodJumpOffset
+      
+      
+        SECTION "data", ROMX[$4000]
+        
+        
+        
+Frame:  INCBIN "1.bin"
+        INCBIN "1.bin"
         
         

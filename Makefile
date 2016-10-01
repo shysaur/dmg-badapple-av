@@ -9,7 +9,8 @@ ASM_SRC = 	video.asm \
 	utils.asm
 	
 DEPS =	video.inc \
-	utils.inc
+	utils.inc \
+	1.bin
 
 ASM_OBJ =	$(patsubst %, $(OBJDIR)/%, $(ASM_SRC:.asm=.o))
 	
