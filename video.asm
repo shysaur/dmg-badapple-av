@@ -164,6 +164,21 @@ Initialize:
         
         
         
+NextBank:
+        ld hl,CurBank
+        ld a,[hl]
+        inc a
+        ld [hl+],a
+        ld [$2222],a
+        ret nz
+        ld a,[hl]
+        inc a
+        ld [hl],a
+        ld [$3333],a
+        ret
+        
+        
+        
 VBlank: push af
         push de
         push hl
@@ -172,12 +187,24 @@ VBlank: push af
         ld a,[hl+]
         ld e,a
         ld d,[hl]
-        ld l,CurSrcAddr & $FF
-        ld a,[hl+]
-        ld h,[hl]
-        ld l,a
         
-        REPT 36
+        ld l,(CurSrcAddr+1) & $FF
+        ld a,[hl-]
+        cp ($8000 - 36*4) >> 8
+        jr c,.nobsA1
+        jr nz,.bsA
+        ld a,[hl+]
+        cp ($8000 - 36*4) & $FF
+        jr c,.nobsA2
+        jr z,.nobsA2
+.bsA:   call NextBank
+        ld hl,$4000
+        jr .bseA
+.nobsA2:ld a,[hl-]
+.nobsA1:ld l,[hl]
+        ld h,a
+        
+.bseA:  REPT 36
         ld a,[hl+]
         ld [de],a
         inc e
@@ -199,6 +226,21 @@ VBlank: push af
         ld a,$18
         ldh [HBlankSelfmodJump],a
         
+        ld a,h
+        cp ($8000 - 144*4) >> 8
+        ld a,l
+        jr c,.nobsB
+        jr nz,.bsB
+        cp ($8000 - 144*4) & $FF
+        jr c,.nobsB
+        jr z,.nobsB
+.bsB:   call NextBank
+        xor a
+        ld h,$40
+.nobsB: ldh [CurSrcAddr],a
+        ld a,h
+        ldh [CurSrcAddr+1],a
+        
         ld c,Cycle & $FF
         ld a,[c]
         dec a
@@ -211,10 +253,6 @@ VBlank: push af
         ldh [$47],a
 
 .nochgpal:        
-        ld a,l
-        ldh [CurSrcAddr],a
-        ld a,h
-        ldh [CurSrcAddr+1],a
         ld hl,CurDestAddr
         ld a,e
         ld [hl+],a
@@ -226,35 +264,7 @@ VBlank: push af
         reti
         
 .nextcycle:
-        ld a,h
-        cp $38 + $40
-        jr nz,.nobankinc
-        
-        ld hl,CurBank
-        ld a,[hl]
-        inc a
-        ld [hl+],a
-        ld [$2222],a
-        jr nc,.noc
-        ld a,[hl]
-        inc a
-        ld [hl],a
-        ld [$3333],a
-        
-.noc:   ld l,CurSrcAddr & $FF
-        ld [hl],$00
-        inc l
-        ld [hl],$40
-        
-        jr .end
-
-.nobankinc:
-        ld a,l
-        ldh [CurSrcAddr],a
-        ld a,h
-        ldh [CurSrcAddr+1],a
-        
-.end:   ld hl,CurDestAddr
+        ld hl,CurDestAddr
         xor a
         ld [hl+],a
         ld a,[hl]

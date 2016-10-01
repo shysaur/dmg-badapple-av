@@ -5,3 +5,6 @@ obj
 bad_apple_f
 frames/*.bmp
 
+*.bin
+stuff
+bad_apple_f_
