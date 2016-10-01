@@ -11,7 +11,7 @@ def encodeSliver(image, origin):
   next = 0
   for x in range(coarsex, coarsex+8):
     next *= 2
-    next += 0 if image.getpixel((x, y)) < 128 else 1
+    next += 1 if image.getpixel((x, y)) < 128 else 0
   return next
   
   
