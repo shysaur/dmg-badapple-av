@@ -6,7 +6,8 @@
 
         SECTION "main_var", HRAM
         
-Cycle:  DS 1
+Cycle:      DS 1
+CurBank:    DS 2
 
 
         SECTION "stack", BSS[$CF00]
@@ -135,6 +136,13 @@ Initialize:
         ld a,$8C
         ldh [CurDestAddr+1],a
         
+        ld a,1
+        ldh [CurBank],a
+        ld [$2222],a
+        xor a
+        ldh [CurBank+1],a
+        ld [$3333],a
+        
         ld a,4
         ldh [Cycle],a
         
@@ -217,19 +225,35 @@ VBlank: push af
         reti
         
 .nextcycle:
-        ld a,$CC
-        ldh [$47],a
-        ld hl,$FF40
-        ld a,$18
-        xor [hl]
+        ld a,h
+        cp $38 + $40
+        jr nz,.nobankinc
+        
+        ld hl,CurBank
+        ld a,[hl]
+        inc a
+        ld [hl+],a
+        ld [$2222],a
+        jr nc,.noc
+        ld a,[hl]
+        inc a
         ld [hl],a
+        ld [$3333],a
         
-        ld a,Frame & $FF
-        ld [CurSrcAddr],a
-        ld a,Frame >> 8
-        ld [CurSrcAddr+1],a
+.noc:   ld l,CurSrcAddr & $FF
+        ld [hl],$00
+        inc l
+        ld [hl],$40
         
-        ld l,CurDestAddr & $FF
+        jr .end
+
+.nobankinc:
+        ld a,l
+        ldh [CurSrcAddr],a
+        ld a,h
+        ldh [CurSrcAddr+1],a
+        
+.end:   ld hl,CurDestAddr
         xor a
         ld [hl+],a
         ld a,[hl]
@@ -237,6 +261,13 @@ VBlank: push af
         sbc a
         and $0C
         or $80
+        ld [hl],a
+        
+        ld a,$CC
+        ldh [$47],a
+        ld hl,$FF40
+        ld a,$18
+        xor [hl]
         ld [hl],a
         
         ld a,4
