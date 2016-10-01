@@ -42,7 +42,7 @@ while os.path.isfile(fn1) and os.path.isfile(fn2):
   
   nextf = encodeImagePair(image1, image2)
   if len(databanks) % 0x4000 + len(nextf) > 0x4000:
-    databanks.extend([0] * (0x4000 - len(databanks)))
+    databanks.extend([0] * (0x4000 - len(databanks) % 0x4000))
   databanks.extend(nextf)
   
   i += 2
@@ -53,3 +53,4 @@ while os.path.isfile(fn1) and os.path.isfile(fn2):
 print("\033[1G\033[KWriting %d frames" % (i))
 fpo = open(sys.argv[2], 'wb')
 fpo.write(databanks)
+
