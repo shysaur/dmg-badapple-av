@@ -120,15 +120,20 @@ Initialize:
         ld hl,$9C00
         call MakePictureRectangle3
         
-        ld a,Frame & $FF
-        ld [CurSrcAddr],a
-        ld a,Frame >> 8
-        ld [CurSrcAddr+1],a
+        ld hl,Frame
+        ld de,$8000
+        ld bc,(20 * 9) * 16
+        call Copy
         
-        ld a,$00
-        ld [CurDestAddr],a
-        ld a,$80
-        ld [CurDestAddr+1],a
+        ld a,l
+        ldh [CurSrcAddr],a
+        ld a,h
+        ldh [CurSrcAddr+1],a
+        
+        xor a
+        ldh [CurDestAddr],a
+        ld a,$8C
+        ldh [CurDestAddr+1],a
         
         ld a,4
         ldh [Cycle],a
