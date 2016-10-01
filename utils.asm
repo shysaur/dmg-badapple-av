@@ -158,9 +158,10 @@ MakePictureRectangle2:
         ;B=rect h
         ;HL=dest in VRAM
         ;E=fill start byte
-        ;Layout:  0  3  6 ...
+        ;Layout:  0  3  6 
         ;         1  4  7
         ;         2  5  8
+        ;               ..
 MakePictureRectangle3:
         ld d,b
 .wlh:   push bc

@@ -63,7 +63,7 @@ Header:
         DB $00          ;CGB flag
         DB 0,0          ;New Licensee Code
         DB 0            ;SGB flag
-        DB 0            ;Cartridge type
+        DB $19          ;Cartridge type
         DB 0            ;ROM size
         DB 0            ;RAM size
         DB $00          ;Destination code
@@ -247,6 +247,7 @@ VBlank: push af
         pop af
         reti
         
+        
 
 HBlankTemplate:
         push af
@@ -307,6 +308,7 @@ HBlankSCYOffset             EQU HBT_scy - HBlankTemplate + 1
 HBlankSelfmodJumpOffset     EQU HBT_endj - HBlankTemplate
 
 
+
         SECTION "hblank_copier", HRAM
     
 HBlank:           DS HBlankCurSrcAddressOffset
@@ -320,11 +322,11 @@ HBlankSelfmodJump:DS 1
                   DS RealHBlankProcSize - HBlankSelfmodJumpOffset
       
       
+      
         SECTION "data", ROMX[$4000]
         
         
         
-Frame:  INCBIN "1.bin"
-        INCBIN "1.bin"
+Frame:  DB 0
         
         
