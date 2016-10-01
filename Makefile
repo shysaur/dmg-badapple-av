@@ -22,10 +22,10 @@ $(OBJDIR):
 $(OBJDIR)/%.o:	%.asm $(DEPS)
 	$(RGB_AS) -o $@ $<
 
-$(OBJDIR)/frames.bin:	frames
+$(OBJDIR)/frames.bin:	frames $(DEPS)
 	./frames2data.py frames/%d.bmp $@
 
-$(OBJDIR)/code.bin: 	$(ASM_OBJ)
+$(OBJDIR)/code.bin: 	$(ASM_OBJ) $(DEPS)
 	$(RGB_LINK) -t -o $@ -n $(OUTPUT:.gb=.sym) -m $(OUTPUT:.gb=.map) $(ASM_OBJ)
 
 $(OUTPUT):	$(OBJDIR)/frames.bin $(OBJDIR)/code.bin
