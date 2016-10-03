@@ -180,6 +180,7 @@ NextBank:
         
         
 VBlank: push af
+        push bc
         push de
         push hl
         
@@ -260,6 +261,7 @@ VBlank: push af
         
         pop hl
         pop de
+        pop bc
         pop af
         reti
         
@@ -286,6 +288,7 @@ VBlank: push af
         
         pop hl
         pop de
+        pop bc
         pop af
         reti
         
