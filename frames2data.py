@@ -8,6 +8,8 @@ import os.path
 
 
 VERBOSE = False
+MAINTAIN_ASPECT = False
+FIT_VERT = False
 
 
 def vprint(*args, **kwargs):
@@ -34,7 +36,20 @@ def encodeImagePair(image1, image2):
       
 
 def prepareImage(filename):
+  global MAINTAIN_ASPECT, FIT_VERT
+  
   image = Image.open(filename).convert("L")
+  if MAINTAIN_ASPECT:
+    if FIT_VERT:
+      destw = 160 * image.height // 144
+      desth = image.height
+    else:
+      destw = image.width
+      desth = 144 * image.width // 160
+    tmp = Image.new("L", (destw, desth))
+    tmp.paste(image, ((destw - image.width) // 2, (desth - image.height) // 2))
+    image = tmp
+  
   image = image.resize((160, 144//2), Image.BILINEAR)
   return image.convert("1", None, Image.NONE)
 
@@ -110,10 +125,18 @@ def main():
                       "generating filenames for all the frames that should " +
                       "contain a single formatting specification suitable for " +
                       "an integer number (such as %%d)")
+  parser.add_argument("-p", "--mantain-aspect", dest="aspect",
+                      choices=['no', 'fit-horizontal', 'fit-vertical'],
+                      default='no', help="specifies if and how to scale each " +
+                      "frame to make them fit the screen")
   options = parser.parse_args()
 
-  global VERBOSE
+  global VERBOSE, MAINTAIN_ASPECT, FIT_VERT
   VERBOSE = options.verbose
+  if options.aspect != 'no':
+    MAINTAIN_ASPECT = True
+    if options.aspect == 'fit-vertical':
+      FIT_VERT = True
   
   if len(options.files) == 1:
     allfiles = scanFiles(options.files[0])
