@@ -10,10 +10,13 @@ import os.path
 VERBOSE = False
 MAINTAIN_ASPECT = False
 FIT_VERT = False
+WIDTH = 160
+HEIGHT = 144
+HBLK_BYTES = 576
+VBLK_BYTES = 144
 
 
 def vprint(*args, **kwargs):
-  global VERBOSE
   if VERBOSE == True: print(*args, file=sys.stderr, **kwargs)
 
 
@@ -28,29 +31,27 @@ def encodeSliver(image, origin):
   
 def encodeImagePair(image1, image2):
   res = array('B')
-  for coarsex in range(0, 160, 8):
-    for y in range(0, 144//2):
+  for coarsex in range(0, WIDTH, 8):
+    for y in range(0, HEIGHT//2):
       res.append(encodeSliver(image1, (coarsex, y)))
       res.append(encodeSliver(image2, (coarsex, y)))
   return res
       
 
 def prepareImage(filename):
-  global MAINTAIN_ASPECT, FIT_VERT
-  
   image = Image.open(filename).convert("L")
   if MAINTAIN_ASPECT:
     if FIT_VERT:
-      destw = 160 * image.height // 144
+      destw = WIDTH * image.height // HEIGHT
       desth = image.height
     else:
       destw = image.width
-      desth = 144 * image.width // 160
+      desth = HEIGHT * image.width // WIDTH
     tmp = Image.new("L", (destw, desth))
     tmp.paste(image, ((destw - image.width) // 2, (desth - image.height) // 2))
     image = tmp
   
-  image = image.resize((160, 144//2), Image.BILINEAR)
+  image = image.resize((WIDTH, HEIGHT//2), Image.BILINEAR)
   return image.convert("1", None, Image.NONE)
 
 
@@ -76,7 +77,7 @@ def encode(inputfns, outputfn):
     if len(lastbank) > 0x4000:
       newbank = array('B')
     
-      for endslice in [144, 576, 144, 576, 144, 576, 144, 576]:
+      for endslice in [VBLK_BYTES, HBLK_BYTES] * 4:
         tmp = lastbank[-endslice:]
         tmp.extend(newbank)
         newbank = tmp
@@ -88,7 +89,7 @@ def encode(inputfns, outputfn):
       lastbank.extend([0] * (0x4000 - len(lastbank)))
     
       if bi >= 0x1FF:
-        vprint("Too much data; stopping at 8 MiB")
+        vprint("\nToo much data; stopping at 8 MiB")
         break
       fpo.write(lastbank)
       lastbank = newbank
@@ -115,6 +116,9 @@ def scanFiles(fnpattern):
 
 
 def main():
+  global VERBOSE, MAINTAIN_ASPECT, FIT_VERT
+  global WIDTH, HEIGHT, VBLK_BYTES, HBLK_BYTES
+  
   parser = ArgumentParser()
   parser.add_argument("-o", "--output", dest="outputfn", default=None,
                       help="write encoded data to FILE", metavar="FILE")
@@ -129,14 +133,24 @@ def main():
                       choices=['no', 'fit-horizontal', 'fit-vertical'],
                       default='no', help="specifies if and how to scale each " +
                       "frame to make them fit the screen")
+  parser.add_argument("-x", "--width", dest="width", type=int,
+                      default=WIDTH, help="the encoded video's width")
+  parser.add_argument("-y", "--height", dest="height", type=int,
+                      default=HEIGHT, help="the encoded video's height")
+  parser.add_argument("-i", "--vblk-bytes", dest="vblkbytes", type=int,
+                      default=VBLK_BYTES, help="the amount of video bytes " +
+                      "copied in vblank")
   options = parser.parse_args()
 
-  global VERBOSE, MAINTAIN_ASPECT, FIT_VERT
   VERBOSE = options.verbose
   if options.aspect != 'no':
     MAINTAIN_ASPECT = True
     if options.aspect == 'fit-vertical':
       FIT_VERT = True
+  WIDTH = options.width
+  HEIGHT = options.height
+  VBLK_BYTES = options.vblkbytes
+  HBLK_BYTES = ((WIDTH // 8) * ((HEIGHT // 2) // 8)) * 16 // 4 - VBLK_BYTES
   
   if len(options.files) == 1:
     allfiles = scanFiles(options.files[0])
