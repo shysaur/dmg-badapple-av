@@ -1,6 +1,19 @@
 RGB_AS ?=	rgbasm
 RGB_LINK ?=	rgblink
 RGB_AR ?=	rgblib
+CONFIG ?=	0
+FIT ?=	no
+
+HEIGHT=144
+VBLKBYTES=144
+ifeq ($(CONFIG),1)
+  HEIGHT=128
+  VBLKBYTES=64
+endif
+ifeq ($(CONFIG),2)
+  HEIGHT=112
+  VBLKBYTES=128
+endif
 
 OUTPUT =	video.gb
 OBJDIR =	obj
@@ -20,10 +33,10 @@ $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
 $(OBJDIR)/%.o:	%.asm $(DEPS)
-	$(RGB_AS) -o $@ $<
+	$(RGB_AS) -o $@ -D CONFIG=$(CONFIG) $<
 
 $(OBJDIR)/frames.bin:	frames $(DEPS)
-	./frames2data.py -o $@ -v frames/%d.bmp
+	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v frames/%d.bmp
 
 $(OBJDIR)/code.bin: 	$(ASM_OBJ) $(DEPS)
 	$(RGB_LINK) -t -o $@ -n $(OUTPUT:.gb=.sym) -m $(OUTPUT:.gb=.map) $(ASM_OBJ)

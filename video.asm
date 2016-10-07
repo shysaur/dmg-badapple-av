@@ -3,6 +3,32 @@
         INCLUDE "video.inc"
         INCLUDE "utils.inc"
         
+        
+IF DEF(CONFIG) == 0
+CONFIG EQU 0
+ENDC
+
+HSIZE EQU 20
+IF CONFIG == 0
+VSIZE EQU 9
+BYTES_PER_HLINE EQU 4
+ENDC
+IF CONFIG == 1
+VSIZE EQU 8
+BYTES_PER_HLINE EQU 4
+ENDC
+IF CONFIG == 2
+VSIZE EQU 7
+BYTES_PER_HLINE EQU 3
+ENDC
+
+BYTES_PER_VBLANK EQU ((HSIZE * VSIZE) * 16 / 4) - (144 * BYTES_PER_HLINE)
+SCY_OFFSET EQU 0 - (144 - 16 * VSIZE) / 4
+        
+IF ((BYTES_PER_VBLANK % 4) != 0) || ((BYTES_PER_HLINE * 144) % 4 != 0)
+  FAIL "BYTES_PER_VBLANK & BYTES_PER_HLINE * 144 must be multiples of 4"
+ENDC
+
 
         SECTION "main_var", HRAM
         
@@ -109,21 +135,31 @@ Initialize:
         ld bc,HBT_end - HBlankTemplate
         call Copy
         
-        ld c,20
-        ld b,9
+        ld a,$FF
+        ld bc,16
+        ld hl,$8BF0
+        call Fill
+        
+        ld a,$BF
+        ld bc,(32*32)*2
+        ld hl,$9800
+        call Fill
+        
+        ld c,HSIZE
+        ld b,VSIZE
         ld e,0
         ld hl,$9800
         call MakePictureRectangle3
         
-        ld c,20
-        ld b,9
+        ld c,HSIZE
+        ld b,VSIZE
         ld e,$C0
         ld hl,$9C00
         call MakePictureRectangle3
         
         ld hl,Frame
         ld de,$8000
-        ld bc,(20 * 9) * 16
+        ld bc,(HSIZE * VSIZE) * 16
         call Copy
         
         ld a,l
@@ -154,6 +190,8 @@ Initialize:
         ldh [$FF],a
         xor a
         ldh [$0F],a
+        ld a,SCY_OFFSET
+        ldh [$42],a
         ei
         
         ld a,$91
@@ -191,11 +229,11 @@ VBlank: push af
         
         ld l,(CurSrcAddr+1) & $FF
         ld a,[hl-]
-        cp ($8000 - 36*4) >> 8
+        cp ($8000 - BYTES_PER_VBLANK) >> 8
         jr c,.nobsA1
         jr nz,.bsA
         ld a,[hl+]
-        cp ($8000 - 36*4) & $FF
+        cp ($8000 - BYTES_PER_VBLANK) & $FF
         jr c,.nobsA2
         jr z,.nobsA2
 .bsA:   call NextBank
@@ -205,7 +243,7 @@ VBlank: push af
 .nobsA1:ld l,[hl]
         ld h,a
         
-.bseA:  REPT 36
+.bseA:  REPT BYTES_PER_VBLANK / 4
         ld a,[hl+]
         ld [de],a
         inc e
@@ -220,7 +258,7 @@ VBlank: push af
         inc de
         ENDR
         
-        xor a
+        ld a,SCY_OFFSET
         ldh [$42],a
         dec a
         ldh [HBlankSCY],a
@@ -228,11 +266,11 @@ VBlank: push af
         ldh [HBlankSelfmodJump],a
         
         ld a,h
-        cp ($8000 - 144*4) >> 8
+        cp ($8000 - 144*BYTES_PER_HLINE) >> 8
         ld a,l
         jr c,.nobsB
         jr nz,.bsB
-        cp ($8000 - 144*4) & $FF
+        cp ($8000 - 144*BYTES_PER_HLINE) & $FF
         jr c,.nobsB
         jr z,.nobsB
 .bsB:   call NextBank
@@ -304,21 +342,25 @@ HBT_csrc:
 HBT_cdest:
         ld de,60000
         
+        IF BYTES_PER_HLINE == 4
+        REPT 3
         ld a,[hl+]
         ld [de],a
         inc e
-        ld a,[hl+]
-        ld [de],a
-        inc e
-        ld a,[hl+]
-        ld [de],a
-        inc e
+        ENDR
         ld a,[hl+]
         ld [de],a
         inc de
+        ELSE
+        REPT 3
+        ld a,[hl+]
+        ld [de],a
+        inc de
+        ENDR
+        ENDC
         
 HBT_scy:
-        ld a,$FF
+        ld a,SCY_OFFSET-1
         ldh [$42],a
         
         ld a,l
