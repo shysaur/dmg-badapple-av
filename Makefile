@@ -17,6 +17,7 @@ endif
 
 OUTPUT =	video.gb
 OBJDIR =	obj
+FRAMESDIR ?=	frames
 
 ASM_SRC = 	video.asm \
 	utils.asm
@@ -35,8 +36,8 @@ $(OBJDIR):
 $(OBJDIR)/%.o:	%.asm $(DEPS)
 	$(RGB_AS) -o $@ -D CONFIG=$(CONFIG) $<
 
-$(OBJDIR)/frames.bin:	frames $(DEPS)
-	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v frames/%d.bmp
+$(OBJDIR)/frames.bin:	$(FRAMESDIR) $(DEPS)
+	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v $(FRAMESDIR)/%d.bmp
 
 $(OBJDIR)/code.bin: 	$(ASM_OBJ) $(DEPS)
 	$(RGB_LINK) -t -o $@ -n $(OUTPUT:.gb=.sym) -m $(OUTPUT:.gb=.map) $(ASM_OBJ)
