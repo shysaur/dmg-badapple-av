@@ -2,6 +2,7 @@
 
         INCLUDE "video.inc"
         INCLUDE "utils.inc"
+        INCLUDE "music.inc"
         
         
 IF DEF(CONFIG) == 0
@@ -34,6 +35,7 @@ ENDC
         
 Cycle:      DS 1
 CurBank:    DS 2
+FrameFlag:  DS 1
 
 
         SECTION "stack", BSS[$CF00]
@@ -182,6 +184,10 @@ Initialize:
         ld a,4
         ldh [Cycle],a
         
+        call SoundReset
+        xor a
+        ld [SoundChangeBgm],a
+        
         ld a,$CC
         ldh [$47],a
         ld a,$08
@@ -197,8 +203,14 @@ Initialize:
         ld a,$91
         ldh [$40],a
                 
+.l2:    ld hl,FrameFlag
+        xor a
 .l:     halt
-        jr .l
+        cp [hl]
+        jr z,.l
+        ld [hl],a
+        call SoundFrame
+        jr .l2
         
         
         
@@ -221,6 +233,9 @@ VBlank: push af
         push bc
         push de
         push hl
+        
+        ld a,1
+        ldh [FrameFlag],a
         
         ld hl,CurDestAddr
         ld a,[hl+]
