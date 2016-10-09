@@ -64,6 +64,7 @@ def encode(inputfns, outputfn):
 
   bi = 1
   overhead = 0
+  i = 0
   for i in range(0, len(inputfns), 2):
     image1 = prepareImage(inputfns[i])
     image2 = prepareImage(inputfns[i+1])
