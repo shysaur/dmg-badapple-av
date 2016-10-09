@@ -112,6 +112,7 @@ def scanFiles(fnpattern):
     allfiles.append(fn)
     i += 1
     fn = fnpattern % i
+  vprint("Found %d" % (i-1))
   return allfiles
 
 
