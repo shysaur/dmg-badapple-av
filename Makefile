@@ -19,6 +19,7 @@ OUTPUT =	video.gb
 OUTPUT_GBS =	music.gbs
 OBJDIR =	obj
 FRAMESDIR ?=	frames
+FRAMEEXT ?=	bmp
 
 ASM_SRC = 	video.asm \
 	utils.asm
@@ -50,7 +51,7 @@ $(OBJDIR)/%.o:	%.asm $(DEPS)
 	$(RGB_AS) -o $@ -D CONFIG=$(CONFIG) $<
 
 $(OBJDIR)/frames.bin:	$(FRAMESDIR) $(DEPS)
-	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v $(FRAMESDIR)/%d.bmp
+	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v $(FRAMESDIR)/%d.$(FRAMEEXT)
 
 $(OBJDIR)/code.bin: 	$(ASM_OBJ) $(DEPS)
 	$(RGB_LINK) -t -o $@ -n $(OUTPUT:.gb=.sym) -m $(OUTPUT:.gb=.map) $(ASM_OBJ)

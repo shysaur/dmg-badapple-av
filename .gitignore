@@ -9,3 +9,4 @@ frames/*.bmp
 stuff
 bad_apple_f_
 *.gbs
+/frames/*.png
