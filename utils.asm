@@ -3,7 +3,7 @@
         INCLUDE "utils.inc"
         
         
-        SECTION "utils", HOME
+        SECTION "utils", ROM0
 
 
 

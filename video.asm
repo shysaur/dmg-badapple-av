@@ -38,43 +38,43 @@ CurBank:    DS 2
 FrameFlag:  DS 1
 
 
-        SECTION "stack", BSS[$CF00]
+        SECTION "stack", WRAM0[$CF00]
         
         DS 256
 Stack:
         
         ;  Interrupt vectors
-        SECTION "ih_vbl",HOME[$40]
+        SECTION "ih_vbl",ROM0[$40]
         
 VBlankInt:
         jp VBlank
 
         
-        SECTION "ih_lcdc",HOME[$48]
+        SECTION "ih_lcdc",ROM0[$48]
         
 LCDCInt:     
         jp HBlank   
         
         
-        SECTION "ih_timer",HOME[$50]
+        SECTION "ih_timer",ROM0[$50]
         
 TimerInt:                        
         reti
         
         
-        SECTION "ih_sio",HOME[$58]
+        SECTION "ih_sio",ROM0[$58]
         
 SerialIOInt:                        
         reti    
         
         
-        SECTION "ih_joy",HOME[$60]
+        SECTION "ih_joy",ROM0[$60]
         
 JoypadInt:                        
         reti
 
         
-        SECTION "header",HOME[$100]
+        SECTION "header",ROM0[$100]
         
 Header:                 
         nop             
@@ -102,7 +102,7 @@ Header:
         DB $00,$00      ;Global checksum
         
         
-        SECTION "main_code",HOME
+        SECTION "main_code",ROM0
         
 Initialize:  
         di
@@ -425,7 +425,7 @@ HBlankSelfmodJump:DS 1
       
       
       
-        SECTION "data", ROMX[$4000]
+        SECTION "data", ROM0[$4000]
         
         
         
