@@ -53,6 +53,22 @@ def prepareImage(filename):
   
   image = image.resize((WIDTH, HEIGHT//2), Image.BILINEAR)
   return image.convert("1", None, Image.NONE)
+  
+  
+def generateBlocks(inputfns):
+  i = 0
+  for i in range(0, len(inputfns), 2):
+    image1 = prepareImage(inputfns[i])
+    image2 = prepareImage(inputfns[i+1])
+  
+    nextf = encodeImagePair(image1, image2)
+    
+    assert len(nextf) == (HBLK_BYTES + VBLK_BYTES) * 4
+  
+    prev_slice_end = 0
+    for cur_slice_len in [HBLK_BYTES, VBLK_BYTES] * 4:
+      yield nextf[prev_slice_end : prev_slice_end+cur_slice_len], i
+      prev_slice_end += cur_slice_len
 
 
 def encode(inputfns, outputfn):
@@ -64,37 +80,26 @@ def encode(inputfns, outputfn):
 
   bi = 1
   overhead = 0
-  i = 0
-  for i in range(0, len(inputfns), 2):
-    image1 = prepareImage(inputfns[i])
-    image2 = prepareImage(inputfns[i+1])
-  
-    vprint("\033[1G\033[KReading frame %d... (current bank = %d)" % (i+1, bi), 
-           end="", flush=True)
-    nextf = encodeImagePair(image1, image2)
-    prevlastbanklen = len(lastbank)
-    lastbank.extend(nextf)
-  
-    if len(lastbank) > 0x4000:
-      newbank = array('B')
-    
-      for endslice in [VBLK_BYTES, HBLK_BYTES] * 4:
-        tmp = lastbank[-endslice:]
-        tmp.extend(newbank)
-        newbank = tmp
-        lastbank = lastbank[:-endslice]
-        if len(lastbank) <= 0x4000:
-          break
+  for block, i in generateBlocks(inputfns):
+    vprint("\033[1G\033[KReading frame %d... (output @ %d:%04X)" % \
+          (i+1, bi, len(lastbank) + 0x4000), \
+          end="", flush=True)
+          
+    if len(lastbank) + len(block) <= 0x4000:
+      lastbank.extend(block)
       
-      overhead += 0x4000 - len(lastbank)
-      lastbank.extend([0] * (0x4000 - len(lastbank)))
-    
+    else:
       if bi >= 0x1FF:
         vprint("\nToo much data; stopping at 8 MiB")
         break
+        
+      overhead += 0x4000 - len(lastbank)
+      lastbank.extend([0] * (0x4000 - len(lastbank)))
       fpo.write(lastbank)
-      lastbank = newbank
-      bi += 1;
+      
+      bi += 1
+      lastbank = bytearray()
+      lastbank.extend(block)
 
   lastbank.extend([0] * (0x4000 - len(lastbank)))
   fpo.write(lastbank)
