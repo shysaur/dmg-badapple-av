@@ -5,6 +5,8 @@ from array import array
 from argparse import ArgumentParser
 import sys
 import os.path
+import itertools
+import functools
 
 
 VERBOSE = False
@@ -14,6 +16,9 @@ WIDTH = 160
 HEIGHT = 144
 HBLK_BYTES = 576
 VBLK_BYTES = 144
+
+HBLK_PACKETS = 144
+VBLK_PACKETS = 36
 
 
 def vprint(*args, **kwargs):
@@ -36,6 +41,21 @@ def encodeImagePair(image1, image2):
       res.append(encodeSliver(image1, (coarsex, y)))
       res.append(encodeSliver(image2, (coarsex, y)))
   return res
+  
+
+def diffFrames(old, new):
+  res = bytearray()
+  lastskip = 0
+  for i in range(0, len(old), 3):
+    p1 = old[i:i+3]
+    p2 = new[i:i+3]
+    if p1 == p2 and lastskip < 255:
+      lastskip += 3
+    else:
+      res += bytes([lastskip])
+      res += p2
+      lastskip = 0
+  return res
       
 
 def prepareImage(filename):
@@ -53,22 +73,73 @@ def prepareImage(filename):
   
   image = image.resize((WIDTH, HEIGHT//2), Image.BILINEAR)
   return image.convert("1", None, Image.NONE)
-  
+
   
 def generateBlocks(inputfns):
+  global HBLK_PACKETS, VBLK_PACKETS
+  
+  def compressedBlock(_head, _body, lastInBank):
+    return _head + bytes([len(_body)//4, 1 if lastInBank else 0, 0, 0]) + _body
+    
+  def literalBlock(_head, _body, lastInBank):
+    return _head + _body
+    
+  def stopBlock(lastInBank):
+    return bytes([1, 0, 0, 0])
+  
   i = 0
+  
+  oldf1, oldf2 = None, None
   for i in range(0, len(inputfns), 2):
     image1 = prepareImage(inputfns[i])
     image2 = prepareImage(inputfns[i+1])
   
     nextf = encodeImagePair(image1, image2)
     
-    assert len(nextf) == (HBLK_BYTES + VBLK_BYTES) * 4
-  
-    prev_slice_end = 0
-    for cur_slice_len in [HBLK_BYTES, VBLK_BYTES] * 4:
-      yield nextf[prev_slice_end : prev_slice_end+cur_slice_len], i
-      prev_slice_end += cur_slice_len
+    oldf = oldf1 if i % 4 == 0 else oldf2
+    compress = False
+    if oldf:
+      diff = diffFrames(oldf, nextf)
+      if len(diff) / 4 >= 720:
+        data = nextf
+      else:
+        compress = True
+        data = diff
+    else:
+      data = nextf
+      
+    # frame head
+    framehead = bytes([0, 1 if compress else 0, 0, 0])
+    
+    if compress:
+      # compressed frame
+      prev_slice_end = 0
+      for cur_slice_len in [HBLK_PACKETS*4, VBLK_PACKETS*4] * 4:
+        if prev_slice_end + cur_slice_len >= len(data):
+          cur_slice_len = len(data) - prev_slice_end
+        
+        body = data[prev_slice_end : prev_slice_end+cur_slice_len]
+        yield functools.partial(compressedBlock, framehead, body), i
+        
+        prev_slice_end += cur_slice_len
+        framehead = bytes()
+        
+    else:
+      # literal frame
+      prev_slice_end = 0
+      for cur_slice_len in [HBLK_BYTES, VBLK_BYTES] * 4:
+        body = data[prev_slice_end : prev_slice_end+cur_slice_len]
+        yield functools.partial(literalBlock, framehead, body), i
+        
+        prev_slice_end += cur_slice_len
+        framehead = bytes()
+        
+    if i % 4 == 0:
+      oldf1 = nextf
+    else:
+      oldf2 = nextf
+
+  yield stopBlock, i
 
 
 def encode(inputfns, outputfn):
@@ -77,16 +148,26 @@ def encode(inputfns, outputfn):
     fpo = open(outputfn, 'wb')
   else:
     fpo = sys.stdout.buffer
+    
+  def lookahead(gen):
+    prevv = next(gen)
+    for nextv in gen:
+      yield prevv[0], prevv[1], len(nextv[0](False))
+      prevv = nextv
+    yield prevv[0], prevv[1], 0
 
   bi = 1
   overhead = 0
-  for block, i in generateBlocks(inputfns):
+  for blockf, i, nextblocksize in lookahead(generateBlocks(inputfns)):
     vprint("\033[1G\033[KReading frame %d... (output @ %d:%04X)" % \
           (i+1, bi, len(lastbank) + 0x4000), \
           end="", flush=True)
           
-    if len(lastbank) + len(block) <= 0x4000:
-      lastbank.extend(block)
+    blocksize = len(blockf(False))
+    
+    if len(lastbank) + blocksize <= 0x4000:
+      nextwillofl = len(lastbank) + blocksize + nextblocksize > 0x4000
+      lastbank.extend(blockf(nextwillofl))
       
     else:
       if bi >= 0x1FF:
@@ -99,7 +180,8 @@ def encode(inputfns, outputfn):
       
       bi += 1
       lastbank = bytearray()
-      lastbank.extend(block)
+      nextwillofl = len(lastbank) + blocksize + nextblocksize > 0x4000
+      lastbank.extend(blockf(nextwillofl))
 
   lastbank.extend([0] * (0x4000 - len(lastbank)))
   fpo.write(lastbank)
