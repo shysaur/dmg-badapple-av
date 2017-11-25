@@ -30,7 +30,7 @@ def encodeSliver(image, origin):
   
   
 def encodeImagePair(image1, image2):
-  res = array('B')
+  res = bytearray()
   for coarsex in range(0, WIDTH, 8):
     for y in range(0, HEIGHT//2):
       res.append(encodeSliver(image1, (coarsex, y)))
@@ -56,7 +56,7 @@ def prepareImage(filename):
 
 
 def encode(inputfns, outputfn):
-  lastbank = array('B')
+  lastbank = bytearray()
   if outputfn != None:
     fpo = open(outputfn, 'wb')
   else:
