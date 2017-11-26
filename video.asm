@@ -522,6 +522,10 @@ HBT_csrc:                 ; CurSrcAddr - 1
 HBT_cdest:                ; CurDestAddr - 1
         ld hl,60000
         
+HBT_scy:                  ; HBlankSCY - 1
+        ld a,SCY_OFFSET-1
+        ldh [$42],a
+        
 HBT_cjmp:                 ; CompressedFlag
         jr HBT_compressed
 
@@ -543,10 +547,7 @@ HBT_notcompr:
         ld [hl+],a
         inc de
         
-HBT_scy:                  ; HBlankSCY - 1
-        ld a,SCY_OFFSET-1
-        ldh [$42],a
-        
+HBT_commend:
         ld a,l
         ldh [CurDestAddr],a
         ld a,h
@@ -558,14 +559,18 @@ HBT_scy:                  ; HBlankSCY - 1
         
 HBT_endj:                 ; HBlankSelfmodJump
         jr .end
-        ld l,HBlankSCY & $FF
+        ld l,HBlankSCY & $FF          ; A == $18!
         dec [hl]
         ld l,HBlankSelfmodJump & $FF
-        ld [hl],$18
+        ld [hl],a                     
         pop hl
         pop de
         pop af
         reti
+        
+        REPT 14                   ; Add some padding to make sure that the
+        nop                       ; jump at HBT_endj has $18 as argument so that
+        ENDR                      ; it becomes a ld a,$18 if it's not taken
         
 .end:   ld a,$3E
         ldh [HBlankSelfmodJump],a
@@ -578,7 +583,7 @@ HBT_compressed:
         ldh a,[$44]         ; Use LY to count the packets already done
 HBT_counter:                ; CompressionPacketCount - 1
         cp 255
-        jr nc,HBT_scy
+        jr nc,HBT_commend
         
         ld a,[de]
         inc e
@@ -594,7 +599,7 @@ HBT_counter:                ; CompressionPacketCount - 1
         ld [hl+],a
         inc de
         
-        jr HBT_scy
+        jr HBT_commend
     
 .carry: inc h
         REPT 2
@@ -606,15 +611,15 @@ HBT_counter:                ; CompressionPacketCount - 1
         ld [hl+],a
         inc de
         
-        jr HBT_scy
+        jr HBT_commend
 HBT_end:
         
         
 RealHBlankProcSize                  EQU HBT_end - HBlankTemplate
 HBlankCurSrcAddressOffset           EQU HBT_csrc - HBlankTemplate + 1
 HBlankCurDestAddressOffset          EQU HBT_cdest - HBlankTemplate + 1
-HBlankCompressedFlagOffset          EQU HBT_cjmp - HBlankTemplate
 HBlankSCYOffset                     EQU HBT_scy - HBlankTemplate + 1
+HBlankCompressedFlagOffset          EQU HBT_cjmp - HBlankTemplate
 HBlankSelfmodJumpOffset             EQU HBT_endj - HBlankTemplate
 HBlankDeltaPacketCountOffset        EQU HBT_counter - HBlankTemplate + 1
 
@@ -625,11 +630,11 @@ HBlank:             DS HBlankCurSrcAddressOffset
 CurSrcAddr:         DS 2
                     DS HBlankCurDestAddressOffset - HBlankCurSrcAddressOffset - 2
 CurDestAddr:        DS 2
-                    DS HBlankCompressedFlagOffset - HBlankCurDestAddressOffset - 2
-CompressedFlag:     DS 1
-                    DS HBlankSCYOffset - HBlankCompressedFlagOffset - 1
+                    DS HBlankSCYOffset - HBlankCurDestAddressOffset - 2
 HBlankSCY:          DS 1
-                    DS HBlankSelfmodJumpOffset - HBlankSCYOffset - 1
+                    DS HBlankCompressedFlagOffset - HBlankSCYOffset - 1
+CompressedFlag:     DS 1
+                    DS HBlankSelfmodJumpOffset - HBlankCompressedFlagOffset - 1
 HBlankSelfmodJump:  DS 1
                     DS HBlankDeltaPacketCountOffset - HBlankSelfmodJumpOffset - 1
 DeltaPacketCount:   DS 1
