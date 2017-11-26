@@ -113,8 +113,30 @@ def generateBlocks(inputfns):
     
     if compress:
       # compressed frame
+      
+      # redistribute the dead time across the entirety of the frame
+      npackets = len(data)//4
+      margin = (HBLK_PACKETS + VBLK_PACKETS) * 4 - npackets
+      hblmargin = int(margin * HBLK_PACKETS / (HBLK_PACKETS + VBLK_PACKETS))
+      vblmargin = margin - hblmargin
+      hblmargin /= 4
+      vblmargin /= 4
+      
+      vblpackets, vblme, hblpackets, hblme = 0, 0, 0, 0
+      blocksizes = []
+      for k in range(4):
+        a = HBLK_PACKETS - int(hblmargin+hblme)
+        b = VBLK_PACKETS - int(vblmargin+vblme)
+        vblpackets += a
+        hblpackets += b
+        blocksizes += [a*4, b*4]
+        vblme = (vblme + vblmargin) % 1
+        hblme = (hblme + hblmargin) % 1
+      
+      assert vblpackets + hblpackets == npackets
+      
       prev_slice_end = 0
-      for cur_slice_len in [HBLK_PACKETS*4, VBLK_PACKETS*4] * 4:
+      for cur_slice_len in blocksizes:
         if prev_slice_end + cur_slice_len >= len(data):
           cur_slice_len = len(data) - prev_slice_end
         
