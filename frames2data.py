@@ -23,6 +23,23 @@ VBLK_PACKETS = 36
 
 def vprint(*args, **kwargs):
   if VERBOSE == True: print(*args, file=sys.stderr, **kwargs)
+  
+  
+def prepareImage(filename):
+  image = Image.open(filename).convert("L")
+  if MAINTAIN_ASPECT:
+    if FIT_VERT:
+      destw = WIDTH * image.height // HEIGHT
+      desth = image.height
+    else:
+      destw = image.width
+      desth = HEIGHT * image.width // WIDTH
+    tmp = Image.new("L", (destw, desth))
+    tmp.paste(image, ((destw - image.width) // 2, (desth - image.height) // 2))
+    image = tmp
+  
+  image = image.resize((WIDTH, HEIGHT//2), Image.BILINEAR)
+  return ImageOps.invert(image).convert("1", None, Image.NONE)
 
 
 def linearizeSingleImage(image):
@@ -62,26 +79,9 @@ def diffFrames(old, new):
       lastskip = 0
     i += 3
   return res
-      
-
-def prepareImage(filename):
-  image = Image.open(filename).convert("L")
-  if MAINTAIN_ASPECT:
-    if FIT_VERT:
-      destw = WIDTH * image.height // HEIGHT
-      desth = image.height
-    else:
-      destw = image.width
-      desth = HEIGHT * image.width // WIDTH
-    tmp = Image.new("L", (destw, desth))
-    tmp.paste(image, ((destw - image.width) // 2, (desth - image.height) // 2))
-    image = tmp
-  
-  image = image.resize((WIDTH, HEIGHT//2), Image.BILINEAR)
-  return ImageOps.invert(image).convert("1", None, Image.NONE)
 
   
-def generateBlocks(inputfns):
+def generateBlocks(inputimgs):
   global HBLK_PACKETS, VBLK_PACKETS
   
   def compressedBlock(_head, _body, lastInBank):
@@ -96,12 +96,7 @@ def generateBlocks(inputfns):
   i = 0
   
   oldf1, oldf2 = None, None
-  for i in range(0, len(inputfns), 2):
-    image1 = prepareImage(inputfns[i])
-    image2 = prepareImage(inputfns[i+1])
-  
-    nextf = encodeImagePair(image1, image2)
-    
+  for nextf, i in zip(inputimgs, itertools.count(0, 2)):
     oldf = oldf1 if i % 4 == 0 else oldf2
     compress = False
     if oldf:
@@ -170,7 +165,7 @@ def generateBlocks(inputfns):
   yield stopBlock, i
 
 
-def encode(inputfns, outputfn):
+def encode(inputimgs, outputfn):
   lastbank = bytearray()
   if outputfn != None:
     fpo = open(outputfn, 'wb')
@@ -186,7 +181,7 @@ def encode(inputfns, outputfn):
 
   bi = 1
   overhead = 0
-  for blockf, i, nextblocksize in lookahead(generateBlocks(inputfns)):
+  for blockf, i, nextblocksize in lookahead(generateBlocks(inputimgs)):
     vprint("\033[1G\033[KReading frame %d... (output @ %d:%04X)" % \
           (i+1, bi, len(lastbank) + 0x4000), \
           end="", flush=True)
@@ -230,6 +225,19 @@ def scanFiles(fnpattern):
     fn = fnpattern % i
   vprint("Found %d" % (i-1))
   return allfiles
+  
+  
+def _processOnePair(fn1, fn2):
+  image1 = prepareImage(fn1)
+  image2 = prepareImage(fn2)
+  return encodeImagePair(image1, image2)
+    
+def readImages(imagefns):
+  from multiprocessing import Pool
+  
+  imagefnpairs = zip(imagefns[0::2], imagefns[1::2])
+  p = Pool()
+  return p.starmap(_processOnePair, imagefnpairs)
 
 
 def main():
@@ -273,8 +281,10 @@ def main():
     allfiles = scanFiles(options.files[0])
   else:
     allfiles = options.files
+  vprint('Reading images...')
+  encimages = readImages(allfiles)
   
-  encode(allfiles, options.outputfn)
+  encode(encimages, options.outputfn)
   
 
 if __name__ == "__main__":
