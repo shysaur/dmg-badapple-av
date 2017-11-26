@@ -10,7 +10,7 @@ import functools
 
 
 VERBOSE = False
-MAINTAIN_ASPECT = False
+ASPECT = 'auto'
 FIT_VERT = False
 WIDTH = 160
 HEIGHT = 144
@@ -27,13 +27,17 @@ def vprint(*args, **kwargs):
   
 def prepareImage(filename):
   image = Image.open(filename).convert("L")
-  if MAINTAIN_ASPECT:
-    if FIT_VERT:
+  if ASPECT != 'no':
+    # auto chooses the fit that fills the whole screen
+    bestfit_is_vert = (image.width / image.height * HEIGHT) >= WIDTH
+    
+    if ASPECT == 'fit-vertical' or (ASPECT == 'auto' and bestfit_is_vert):
       destw = WIDTH * image.height // HEIGHT
       desth = image.height
-    else:
+    elif ASPECT == 'fit-horizontal' or (ASPECT == 'auto' and not bestfit_is_vert):
       destw = image.width
       desth = HEIGHT * image.width // WIDTH
+      
     tmp = Image.new("L", (destw, desth))
     tmp.paste(image, ((destw - image.width) // 2, (desth - image.height) // 2))
     image = tmp
@@ -255,8 +259,8 @@ def main():
                       "contain a single formatting specification suitable for " +
                       "an integer number (such as %%d)")
   parser.add_argument("-p", "--mantain-aspect", dest="aspect",
-                      choices=['no', 'fit-horizontal', 'fit-vertical'],
-                      default='no', help="specifies if and how to scale each " +
+                      choices=['no', 'fit-horizontal', 'fit-vertical', 'auto'],
+                      default='auto', help="specifies if and how to scale each " +
                       "frame to make them fit the screen")
   parser.add_argument("-x", "--width", dest="width", type=int,
                       default=WIDTH, help="the encoded video's width")
@@ -268,10 +272,7 @@ def main():
   options = parser.parse_args()
 
   VERBOSE = options.verbose
-  if options.aspect != 'no':
-    MAINTAIN_ASPECT = True
-    if options.aspect == 'fit-vertical':
-      FIT_VERT = True
+  ASPECT = options.aspect
   WIDTH = options.width
   HEIGHT = options.height
   VBLK_BYTES = options.vblkbytes

@@ -2,7 +2,7 @@ RGB_AS ?=	rgbasm
 RGB_LINK ?=	rgblink
 RGB_AR ?=	rgblib
 CONFIG ?=	0
-FIT ?=	no
+FIT ?=	auto
 
 HEIGHT=144
 VBLKBYTES=144
