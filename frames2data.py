@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from PIL import Image
+from PIL import Image, ImageOps
 from array import array
 from argparse import ArgumentParser
 import sys
@@ -25,22 +25,19 @@ def vprint(*args, **kwargs):
   if VERBOSE == True: print(*args, file=sys.stderr, **kwargs)
 
 
-def encodeSliver(image, origin):
-  coarsex, y = origin
-  next = 0
-  for x in range(coarsex, coarsex+8):
-    next *= 2
-    next += 1 if image.getpixel((x, y)) < 128 else 0
-  return next
+def linearizeSingleImage(image):
+  out = Image.new('1', (8, image.height * (image.width//8)))
+  for x in range(0, image.width, 8):
+    out.paste(image.crop((x, 0, x+8, image.height)), (0, (x//8)*image.height))
+  return out
   
   
 def encodeImagePair(image1, image2):
-  res = bytearray()
-  for coarsex in range(0, WIDTH, 8):
-    for y in range(0, HEIGHT//2):
-      res.append(encodeSliver(image1, (coarsex, y)))
-      res.append(encodeSliver(image2, (coarsex, y)))
-  return res
+  ei1, ei2 = linearizeSingleImage(image1), linearizeSingleImage(image2)
+  out = Image.new('1', (16, ei1.height))
+  out.paste(ei1, (0, 0))
+  out.paste(ei2, (8, 0))
+  return out.tobytes()
   
 
 def diffFrames(old, new):
@@ -81,7 +78,7 @@ def prepareImage(filename):
     image = tmp
   
   image = image.resize((WIDTH, HEIGHT//2), Image.BILINEAR)
-  return image.convert("1", None, Image.NONE)
+  return ImageOps.invert(image).convert("1", None, Image.NONE)
 
   
 def generateBlocks(inputfns):
