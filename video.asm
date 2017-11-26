@@ -212,7 +212,7 @@ Initialize:
         
         ld a,$91
         ldh [$40],a             ; LCDC on!
-                
+
 .l2:    ld hl,FrameFlag
         xor a
 .l:     halt
@@ -346,7 +346,6 @@ VBlank: push af
         jr nz,.nc_nofirstcompressedpacket
         
         ld a,[hl+]
-        inc a
         ldh [DeltaPacketCount],a
         ld a,[hl+]
         ldh [BankswitchPending],a
@@ -492,7 +491,6 @@ VBlank: push af
 
 .c_nochgpal: 
         ld a,[de]
-        inc a
         ldh [DeltaPacketCount],a
         inc e
         ld a,[de]
@@ -577,17 +575,16 @@ HBT_endj:                 ; HBlankSelfmodJump
         reti
         
 HBT_compressed:
+        ldh a,[$44]         ; Use LY to count the packets already done
 HBT_counter:                ; CompressionPacketCount - 1
-        ld a,255
-        dec a
-        jr z,HBT_scy
-        ldh [DeltaPacketCount],a
+        cp 255
+        jr nc,HBT_scy
         
         ld a,[de]
         inc e
         add l
-        jr c,.carry
         ld l,a
+        jr c,.carry
         REPT 2
         ld a,[de]
         ld [hl+],a
@@ -600,7 +597,6 @@ HBT_counter:                ; CompressionPacketCount - 1
         jr HBT_scy
     
 .carry: inc h
-        ld l,a
         REPT 2
         ld a,[de]
         ld [hl+],a
