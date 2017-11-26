@@ -11,7 +11,6 @@ import functools
 
 VERBOSE = False
 ASPECT = 'auto'
-FIT_VERT = False
 WIDTH = 160
 HEIGHT = 144
 HBLK_BYTES = 576
@@ -186,7 +185,7 @@ def encode(inputimgs, outputfn):
   bi = 1
   overhead = 0
   for blockf, i, nextblocksize in lookahead(generateBlocks(inputimgs)):
-    vprint("\033[1G\033[KOutputting metaframe %d @ %d:%04X" % \
+    vprint("\033[1G\033[KOutputting frame %d @ %d:%04X" % \
           (i+1, bi, len(lastbank) + 0x4000), \
           end="", flush=True)
           
@@ -239,7 +238,11 @@ def _processOnePair(fn1, fn2):
 def readImages(imagefns):
   from multiprocessing import Pool
   
-  imagefnpairs = zip(imagefns[0::2], imagefns[1::2])
+  imagefnpairs = list(zip(imagefns[0::2], imagefns[1::2]))
+  # duplicate the last image twice because when the video stops the player will 
+  # freeze before switching to the last metaframe
+  imagefnpairs.append((imagefns[-1], imagefns[-1]))
+  
   p = Pool()
   return p.starmap(_processOnePair, imagefnpairs)
 

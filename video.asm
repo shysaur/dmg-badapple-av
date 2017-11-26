@@ -337,6 +337,8 @@ VBlank: push af
         ; HL = source address for next metaframe
 .nextcycle:
         ld a,[hl+]                ; Read stop flag
+        and a
+        jr nz,.end_video          ; Stop flag != 0 => end the video
         ld a,[hl+]                ; Read compression flag
         ldh [CompressedFlag],a
         inc hl
@@ -384,21 +386,37 @@ VBlank: push af
         pop af
         reti
         
+.end_video:
+        xor a
+        ldh [CurSrcAddr], a         ; Set the src address to zero so that we'll
+        ldh [CurSrcAddr+1], a       ; remember that we stopped
+        
+        ldh [DeltaPacketCount], a   ; When compression is enabled and the delta
+        ld a,F_COMPRESSED           ; packet count is zero, the HBlank thread
+        ldh [CompressedFlag], a     ; is idle
+        
+        pop hl
+        pop de
+        pop bc
+        pop af
+        reti
+        
         
 .vbl_compression:
-        ldh a,[BankswitchPending]
-        and a
-        jr z,.c_nobankswitch
-        
-        call NextBank
-        ld de,$4000
-        jr .c_nextpacket
-        
-.c_nobankswitch
         ld hl,CurSrcAddr
         ld a,[hl+]
         ld e,a
-        ld d,[hl]           ; Read the source address in DE
+        ld d,[hl]                   ; Read the last source address in DE
+        
+        or d                        ; Destination address == 0
+        jp z,.video_ended           ; => video has already ended!
+        
+        ldh a,[BankswitchPending]
+        and a
+        jr z,.c_nextpacket
+        
+        call NextBank
+        ld de,$4000
 
 .c_nextpacket:
         ld a,[de]
@@ -503,6 +521,21 @@ VBlank: push af
         ld a,e
         ld [hl+],a
         ld [hl],d        
+        
+        pop hl
+        pop de
+        pop bc
+        pop af
+        reti
+        
+        
+.video_ended:
+        ld a,SCY_OFFSET
+        ldh [$42],a
+        dec a
+        ldh [HBlankSCY],a
+        ld a,$18
+        ldh [HBlankSelfmodJump],a
         
         pop hl
         pop de
