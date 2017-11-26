@@ -362,7 +362,7 @@ VBlank: push af
         xor a
         ld [hl+],a
         ld a,[hl]
-        cp $90
+        cp $8C
         sbc a
         and $0C
         or $80
