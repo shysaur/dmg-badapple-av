@@ -303,9 +303,9 @@ VBlank: push af
         jr c,.nobsB
         jr z,.nobsB
 .bsB:   call NextBank
-        xor a
-        ld h,$40
-.nobsB: ldh [CurSrcAddr],a
+        ld hl,$4000
+.nobsB: ld a,l
+        ldh [CurSrcAddr],a
         ld a,h
         ldh [CurSrcAddr+1],a
         
