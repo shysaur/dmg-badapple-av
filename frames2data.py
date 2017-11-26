@@ -79,88 +79,88 @@ def diffFrames(old, new):
       lastskip = 0
     i += 3
   return res
-
   
-def generateBlocks(inputimgs):
-  global HBLK_PACKETS, VBLK_PACKETS
   
+def generateBlocksForMetaframe(oldf, nextf):
   def compressedBlock(_head, _body, lastInBank):
     return _head + bytes([len(_body)//4, 1 if lastInBank else 0, 0, 0]) + _body
     
   def literalBlock(_head, _body, lastInBank):
     return _head + _body
     
+  if oldf:
+    diff = diffFrames(oldf, nextf)
+    if len(diff) + 8*4 >= (HBLK_BYTES + VBLK_BYTES) * 4:
+      compress = False
+      data = nextf
+    else:
+      compress = True
+      data = diff
+  else:
+    compress = False
+    data = nextf
+    
+  # frame head
+  framehead = bytes([0, 0x18 if compress else 0x3E, 0, 0])
+  
+  if compress:
+    # compressed frame
+    
+    # redistribute the dead time across the entirety of the frame
+    npackets = len(data)//4
+    margin = (HBLK_PACKETS + VBLK_PACKETS) * 4 - npackets
+    hblmargin = int(margin * HBLK_PACKETS / (HBLK_PACKETS + VBLK_PACKETS))
+    vblmargin = margin - hblmargin
+    hblmargin /= 4
+    vblmargin /= 4
+    
+    vblpackets, vblme, hblpackets, hblme = 0, 0, 0, 0
+    blocksizes = []
+    for k in range(4):
+      a = HBLK_PACKETS - int(hblmargin+hblme)
+      b = VBLK_PACKETS - int(vblmargin+vblme)
+      vblpackets += a
+      hblpackets += b
+      blocksizes += [a*4, b*4]
+      vblme = (vblme + vblmargin) % 1
+      hblme = (hblme + hblmargin) % 1
+    
+    assert vblpackets + hblpackets == npackets
+    
+    prev_slice_end = 0
+    for cur_slice_len in blocksizes:
+      if prev_slice_end + cur_slice_len >= len(data):
+        cur_slice_len = len(data) - prev_slice_end
+      
+      body = data[prev_slice_end : prev_slice_end+cur_slice_len]
+      yield functools.partial(compressedBlock, framehead, body)
+      
+      prev_slice_end += cur_slice_len
+      framehead = bytes()
+      
+  else:
+    # literal frame
+    prev_slice_end = 0
+    for cur_slice_len in [HBLK_BYTES, VBLK_BYTES] * 4:
+      body = data[prev_slice_end : prev_slice_end+cur_slice_len]
+      yield functools.partial(literalBlock, framehead, body)
+      
+      prev_slice_end += cur_slice_len
+      framehead = bytes()
+
+  
+def generateBlocks(inputimgs):
+  global HBLK_PACKETS, VBLK_PACKETS
+    
   def stopBlock(lastInBank):
     return bytes([1, 0, 0, 0])
     
-  i = 0
+  metaframes = [None, None]
+  metaframes += inputimgs
   
-  oldf1, oldf2 = None, None
-  for nextf, i in zip(inputimgs, itertools.count(0, 2)):
-    oldf = oldf1 if i % 4 == 0 else oldf2
-    compress = False
-    if oldf:
-      diff = diffFrames(oldf, nextf)
-      if len(diff) + 8*4 >= (HBLK_BYTES + VBLK_BYTES) * 4:
-        data = nextf
-      else:
-        compress = True
-        data = diff
-    else:
-      data = nextf
-      
-    # frame head
-    framehead = bytes([0, 0x18 if compress else 0x3E, 0, 0])
-    
-    if compress:
-      # compressed frame
-      
-      # redistribute the dead time across the entirety of the frame
-      npackets = len(data)//4
-      margin = (HBLK_PACKETS + VBLK_PACKETS) * 4 - npackets
-      hblmargin = int(margin * HBLK_PACKETS / (HBLK_PACKETS + VBLK_PACKETS))
-      vblmargin = margin - hblmargin
-      hblmargin /= 4
-      vblmargin /= 4
-      
-      vblpackets, vblme, hblpackets, hblme = 0, 0, 0, 0
-      blocksizes = []
-      for k in range(4):
-        a = HBLK_PACKETS - int(hblmargin+hblme)
-        b = VBLK_PACKETS - int(vblmargin+vblme)
-        vblpackets += a
-        hblpackets += b
-        blocksizes += [a*4, b*4]
-        vblme = (vblme + vblmargin) % 1
-        hblme = (hblme + hblmargin) % 1
-      
-      assert vblpackets + hblpackets == npackets
-      
-      prev_slice_end = 0
-      for cur_slice_len in blocksizes:
-        if prev_slice_end + cur_slice_len >= len(data):
-          cur_slice_len = len(data) - prev_slice_end
-        
-        body = data[prev_slice_end : prev_slice_end+cur_slice_len]
-        yield functools.partial(compressedBlock, framehead, body), i
-        
-        prev_slice_end += cur_slice_len
-        framehead = bytes()
-        
-    else:
-      # literal frame
-      prev_slice_end = 0
-      for cur_slice_len in [HBLK_BYTES, VBLK_BYTES] * 4:
-        body = data[prev_slice_end : prev_slice_end+cur_slice_len]
-        yield functools.partial(literalBlock, framehead, body), i
-        
-        prev_slice_end += cur_slice_len
-        framehead = bytes()
-        
-    if i % 4 == 0:
-      oldf1 = nextf
-    else:
-      oldf2 = nextf
+  for i, oldmf, thismf in zip(itertools.count(0, 2), metaframes[0:], metaframes[2:]):
+    for block in generateBlocksForMetaframe(oldmf, thismf):
+      yield block, i
 
   yield stopBlock, i
 
@@ -182,7 +182,7 @@ def encode(inputimgs, outputfn):
   bi = 1
   overhead = 0
   for blockf, i, nextblocksize in lookahead(generateBlocks(inputimgs)):
-    vprint("\033[1G\033[KReading frame %d... (output @ %d:%04X)" % \
+    vprint("\033[1G\033[KOutputting metaframe %d @ %d:%04X" % \
           (i+1, bi, len(lastbank) + 0x4000), \
           end="", flush=True)
           
