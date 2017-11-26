@@ -4,7 +4,7 @@ FrameHead := Stop + Compressed + `00 00`
 
 Stop := `00` | `01`
 
-Compressed := `00` | `01`
+Compressed := `3E` | `18`
 
 BlockHead := NumPackets + BankInc + `00 00`
 
@@ -23,3 +23,5 @@ MetaFrame := FrameHead + Block * 8 (compressed == 1) | FrameHead + Data (compres
 NumPackets max = 36 for vblank, 144 for hblank
 
 Bankswitches are allowed only between blocks.
+
+Compressed is `3E` when the data is NOT compressed, and `18` when it IS compressed.

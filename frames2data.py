@@ -109,7 +109,7 @@ def generateBlocks(inputfns):
       data = nextf
       
     # frame head
-    framehead = bytes([0, 1 if compress else 0, 0, 0])
+    framehead = bytes([0, 0x18 if compress else 0x3E, 0, 0])
     
     if compress:
       # compressed frame

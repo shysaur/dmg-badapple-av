@@ -31,11 +31,16 @@ IF ((BYTES_PER_VBLANK % 4) != 0) || ((BYTES_PER_HLINE * 144) % 4 != 0)
 ENDC
 
 
+F_COMPRESSED                EQU $18
+F_NOT_COMPRESSED            EQU $3E
+
+
         SECTION "main_var", HRAM
         
-Cycle:      DS 1
-CurBank:    DS 2
-FrameFlag:  DS 1
+Cycle:                        DS 1
+CurBank:                      DS 2
+FrameFlag:                    DS 1
+BankswitchPending:            DS 1      ; compressed metaframes only
 
 
         SECTION "stack", WRAM0[$CF00]
@@ -130,86 +135,91 @@ Initialize:
         jr nz,.wvblk       ;Loop until it is just inside VBlank
         
         xor a
-        ldh [$40],a
+        ldh [$40],a         ; Disable LCDC
         
         ld de,HBlank
         ld hl,HBlankTemplate
-        ld bc,HBT_end - HBlankTemplate
-        call Copy
+        ld bc,HBT_end - HBlankTemplate    ; Copy the HBlank procedure in HRAM
+        call Copy                         ; as it is self-modifying
         
         ld a,$FF
         ld bc,16
         ld hl,$8BF0
-        call Fill
+        call Fill           ; Create a black tile for the backdrop (index $BF)       
         
         ld a,$BF
         ld bc,(32*32)*2
         ld hl,$9800
-        call Fill
+        call Fill           ; Fill all the pattern tables with the backdrop tile
         
         ld c,HSIZE
         ld b,VSIZE
         ld e,0
         ld hl,$9800
-        call MakePictureRectangle3
+        call MakePictureRectangle3      ; Pictures 0-1 pattern table
         
         ld c,HSIZE
         ld b,VSIZE
         ld e,$C0
         ld hl,$9C00
-        call MakePictureRectangle3
+        call MakePictureRectangle3      ; Pictures 2-3 pattern table
         
-        ld hl,Frame
+        ld hl,Frame+4                   ; Assume the first metaframe is literal
         ld de,$8000
         ld bc,(HSIZE * VSIZE) * 16
-        call Copy
+        call Copy                       ; Upload pictures 0-1 with the LCDC off
         
+        ld a,F_NOT_COMPRESSED
+        ldh [CompressedFlag],a          ; The 2nd metaframe must also be literal
+        
+        ld bc,4                         ; Skip the second metaframe header
+        add hl,bc                       ; (it must be 0,0,0,0)
         ld a,l
         ldh [CurSrcAddr],a
         ld a,h
-        ldh [CurSrcAddr+1],a
+        ldh [CurSrcAddr+1],a            ; Initialize the src address
         
         xor a
         ldh [CurDestAddr],a
         ld a,$8C
-        ldh [CurDestAddr+1],a
+        ldh [CurDestAddr+1],a           ; Initialize the dest address
         
         ld a,1
         ldh [CurBank],a
         ld [$2222],a
         xor a
-        ldh [CurBank+1],a
-        ld [$3333],a
+        ldh [CurBank+1],a               ; Initialize the bank counters & sync
+        ld [$3333],a                    ; them with the MBC (assumed MBC5)
         
-        ld a,4
-        ldh [Cycle],a
+        ld a,4                          ; Initialize the frame down-counter
+        ldh [Cycle],a                   ; (counts for next metaframe)
         
         call SoundReset
         xor a
-        ld [SoundChangeBgm],a
+        ld [SoundChangeBgm],a           ; Initialize sound player
         
         ld a,$CC
-        ldh [$47],a
+        ldh [$47],a             ; Initialize palette
         ld a,$08
-        ldh [$41],a
+        ldh [$41],a             ; Select HBlank as LCDC interrupt source
         ld a,$03
-        ldh [$FF],a
-        xor a
-        ldh [$0F],a
+        ldh [$FF],a             ; Enable LCDC interrupts and VBL interrupts
+        xor a                   ; Clear the interrupt flag (no spurious
+        ldh [$0F],a             ; interrupts please)
         ld a,SCY_OFFSET
-        ldh [$42],a
-        ei
+        ldh [$42],a             ; Scroll up a bit for creating the bars
+        ei                      ; Interrupts on!
         
         ld a,$91
-        ldh [$40],a
+        ldh [$40],a             ; LCDC on!
                 
 .l2:    ld hl,FrameFlag
         xor a
 .l:     halt
         cp [hl]
-        jr z,.l
+        jr z,.l                 ; Wait for next VBlank
         ld [hl],a
-        call SoundFrame
+        call SoundFrame         ; Update sound at every frame
         jr .l2
         
         
@@ -236,6 +246,10 @@ VBlank: push af
         
         ld a,1
         ldh [FrameFlag],a
+        
+        ld a,[CompressedFlag]
+        cp F_COMPRESSED
+        jp z,.vbl_compression
         
         ld hl,CurDestAddr
         ld a,[hl+]
@@ -318,7 +332,33 @@ VBlank: push af
         pop af
         reti
         
+        
+        ; Reset the addresses for the next 4 frame upload cycle
+        ; HL = source address for next metaframe
 .nextcycle:
+        ld a,[hl+]                ; Read stop flag
+        ld a,[hl+]                ; Read compression flag
+        ldh [CompressedFlag],a
+        inc hl
+        inc hl
+        
+        cp $18
+        jr nz,.nc_nofirstcompressedpacket
+        
+        ld a,[hl+]
+        inc a
+        ldh [DeltaPacketCount],a
+        ld a,[hl+]
+        ldh [BankswitchPending],a
+        inc hl
+        inc hl
+        
+.nc_nofirstcompressedpacket:
+        ld a,l
+        ldh [CurSrcAddr],a
+        ld a,h
+        ldh [CurSrcAddr+1],a
+        
         ld hl,CurDestAddr
         xor a
         ld [hl+],a
@@ -346,82 +386,258 @@ VBlank: push af
         reti
         
         
+.vbl_compression:
+        ldh a,[BankswitchPending]
+        and a
+        jr z,.c_nobankswitch
+        
+        call NextBank
+        ld de,$4000
+        jr .c_nextpacket
+        
+.c_nobankswitch
+        ld hl,CurSrcAddr
+        ld a,[hl+]
+        ld e,a
+        ld d,[hl]           ; Read the source address in DE
+
+.c_nextpacket:
+        ld a,[de]
+        inc e
+        inc a
+        ld c,a              ; Read the packet count in the block head
+        ld a,[de]
+        ldh [BankswitchPending],a
+        inc e               ; Read the bankswitch flag in the block head
+        inc e
+        inc de              ; Skip the rest of the block head
+        
+        dec c
+        jp z,.c_end2         ; Empty block, skip everyting
+        
+        ld a,36
+        sub c
+        swap a
+        ld b,a
+        and $F0
+        ld c,a
+        xor b
+        ld b,a
+        ld hl,.c_copy
+        add hl,bc
+        push hl
+
+        ld hl,CurDestAddr
+        ld a,[hl+]
+        ld h,[hl]
+        ld l,a               ; Load the destination address
+        
+        ret                  ; jump inside the copy unrolled loop
+.c_copy:
+        REPT 36
+        ld a,[de]
+        inc e
+        add l
+        DB $30, 1   ;jr nc,+1
+        inc h
+        ld l,a
+        ld a,[de]
+        ld [hl+],a
+        inc e
+        ld a,[de]
+        ld [hl+],a
+        inc e
+        ld a,[de]
+        ld [hl+],a
+        inc de          
+        ENDR        ; 16 bytes per iteration!
+        
+.c_end:
+        ld a,l
+        ldh [CurDestAddr],a
+        ld a,h
+        ldh [CurDestAddr+1],a
+        
+.c_end2:
+        ld a,SCY_OFFSET
+        ldh [$42],a
+        dec a
+        ldh [HBlankSCY],a
+        ld a,$18
+        ldh [HBlankSelfmodJump],a
+        
+        ldh a,[BankswitchPending]
+        and a
+        jr z,.c_nobankswitch2
+        
+        call NextBank
+        ld de,$4000
+        
+.c_nobankswitch2:
+        ld c,Cycle & $FF
+        ld a,[c]
+        dec a
+        ld [c],a
+        jr nz,.c_nonextcycle
+        
+        ld h,d
+        ld l,e
+        jp .nextcycle
+        
+.c_nonextcycle:
+        rra
+        jr c,.c_nochgpal
+        ld a,$F0
+        ldh [$47],a
+
+.c_nochgpal: 
+        ld a,[de]
+        inc a
+        ldh [DeltaPacketCount],a
+        inc e
+        ld a,[de]
+        ldh [BankswitchPending],a
+        inc e
+        inc e
+        inc de
+        
+        ld hl,CurSrcAddr
+        ld a,e
+        ld [hl+],a
+        ld [hl],d        
+        
+        pop hl
+        pop de
+        pop bc
+        pop af
+        reti
+        
+        
 
 HBlankTemplate:
         push af
         push de
         push hl
         
-HBT_csrc:
-        ld hl,60000
-HBT_cdest:
+HBT_csrc:                 ; CurSrcAddr - 1
         ld de,60000
+HBT_cdest:                ; CurDestAddr - 1
+        ld hl,60000
         
+HBT_cjmp:                 ; CompressedFlag
+        jr HBT_compressed
+
+HBT_notcompr: 
         IF BYTES_PER_HLINE == 4
         REPT 3
-        ld a,[hl+]
-        ld [de],a
+        ld a,[de]
+        ld [hl+],a
         inc e
         ENDR
-        ld a,[hl+]
-        ld [de],a
-        inc de
         ELSE
-        REPT 3
-        ld a,[hl+]
-        ld [de],a
+        REPT 2
+        ld a,[de]
+        ld [hl+],a
         inc de
         ENDR
         ENDC
+        ld a,[de]
+        ld [hl+],a
+        inc de
         
-HBT_scy:
+HBT_scy:                  ; HBlankSCY - 1
         ld a,SCY_OFFSET-1
         ldh [$42],a
         
         ld a,l
-        ldh [CurSrcAddr],a
+        ldh [CurDestAddr],a
         ld a,h
-        ldh [CurSrcAddr+1],a
-        ld hl,CurDestAddr
+        ldh [CurDestAddr+1],a
+        ld hl,CurSrcAddr
         ld a,e
         ld [hl+],a
         ld [hl],d
         
-HBT_endj:
+HBT_endj:                 ; HBlankSelfmodJump
         jr .end
-        ld hl,HBlankSCY
+        ld l,HBlankSCY & $FF
         dec [hl]
         ld l,HBlankSelfmodJump & $FF
         ld [hl],$18
-        jr .end2
-.end:   ld a,$3E
-        ldh [HBlankSelfmodJump],a
-.end2:  pop hl
+        pop hl
         pop de
         pop af
         reti
+        
+.end:   ld a,$3E
+        ldh [HBlankSelfmodJump],a
+        pop hl
+        pop de
+        pop af
+        reti
+        
+HBT_compressed:
+HBT_counter:                ; CompressionPacketCount - 1
+        ld a,255
+        dec a
+        jr z,HBT_scy
+        ldh [DeltaPacketCount],a
+        
+        ld a,[de]
+        inc e
+        add l
+        jr c,.carry
+        ld l,a
+        REPT 2
+        ld a,[de]
+        ld [hl+],a
+        inc e
+        ENDR
+        ld a,[de]
+        ld [hl+],a
+        inc de
+        
+        jr HBT_scy
+    
+.carry: inc h
+        ld l,a
+        REPT 2
+        ld a,[de]
+        ld [hl+],a
+        inc e
+        ENDR
+        ld a,[de]
+        ld [hl+],a
+        inc de
+        
+        jr HBT_scy
 HBT_end:
         
         
-RealHBlankProcSize          EQU HBT_end - HBlankTemplate
-HBlankCurSrcAddressOffset   EQU HBT_csrc - HBlankTemplate + 1
-HBlankCurDestAddressOffset  EQU HBT_cdest - HBlankTemplate + 1
-HBlankSCYOffset             EQU HBT_scy - HBlankTemplate + 1
-HBlankSelfmodJumpOffset     EQU HBT_endj - HBlankTemplate
-
+RealHBlankProcSize                  EQU HBT_end - HBlankTemplate
+HBlankCurSrcAddressOffset           EQU HBT_csrc - HBlankTemplate + 1
+HBlankCurDestAddressOffset          EQU HBT_cdest - HBlankTemplate + 1
+HBlankCompressedFlagOffset          EQU HBT_cjmp - HBlankTemplate
+HBlankSCYOffset                     EQU HBT_scy - HBlankTemplate + 1
+HBlankSelfmodJumpOffset             EQU HBT_endj - HBlankTemplate
+HBlankDeltaPacketCountOffset        EQU HBT_counter - HBlankTemplate + 1
 
 
         SECTION "hblank_copier", HRAM
     
-HBlank:           DS HBlankCurSrcAddressOffset
-CurSrcAddr:       DS 2
-                  DS HBlankCurDestAddressOffset - HBlankCurSrcAddressOffset - 2
-CurDestAddr:      DS 2
-                  DS HBlankSCYOffset - HBlankCurDestAddressOffset - 2
-HBlankSCY:        DS 1
-                  DS HBlankSelfmodJumpOffset - HBlankSCYOffset - 1
-HBlankSelfmodJump:DS 1
-                  DS RealHBlankProcSize - HBlankSelfmodJumpOffset
+HBlank:             DS HBlankCurSrcAddressOffset
+CurSrcAddr:         DS 2
+                    DS HBlankCurDestAddressOffset - HBlankCurSrcAddressOffset - 2
+CurDestAddr:        DS 2
+                    DS HBlankCompressedFlagOffset - HBlankCurDestAddressOffset - 2
+CompressedFlag:     DS 1
+                    DS HBlankSCYOffset - HBlankCompressedFlagOffset - 1
+HBlankSCY:          DS 1
+                    DS HBlankSelfmodJumpOffset - HBlankSCYOffset - 1
+HBlankSelfmodJump:  DS 1
+                    DS HBlankDeltaPacketCountOffset - HBlankSelfmodJumpOffset - 1
+DeltaPacketCount:   DS 1
+                    DS RealHBlankProcSize - HBlankDeltaPacketCountOffset
       
       
       
