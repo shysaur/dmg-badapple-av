@@ -44,9 +44,17 @@ def encodeImagePair(image1, image2):
   
 
 def diffFrames(old, new):
+  assert len(old) == len(new)
+  
+  if len(old) % 3 != 0:
+    pad = bytes([0] * (3 - len(old) % 3))
+    old = bytes(old) + pad
+    new = bytes(new) + pad
+
   res = bytearray()
   lastskip = 0
-  for i in range(0, len(old), 3):
+  i = 0
+  while old[i:] != new[i:]:
     p1 = old[i:i+3]
     p2 = new[i:i+3]
     if p1 == p2 and lastskip < 255:
@@ -55,6 +63,7 @@ def diffFrames(old, new):
       res += bytes([lastskip])
       res += p2
       lastskip = 0
+    i += 3
   return res
       
 
@@ -86,7 +95,7 @@ def generateBlocks(inputfns):
     
   def stopBlock(lastInBank):
     return bytes([1, 0, 0, 0])
-  
+    
   i = 0
   
   oldf1, oldf2 = None, None
@@ -100,7 +109,7 @@ def generateBlocks(inputfns):
     compress = False
     if oldf:
       diff = diffFrames(oldf, nextf)
-      if len(diff) / 4 >= 720:
+      if len(diff) + 8*4 >= (HBLK_BYTES + VBLK_BYTES) * 4:
         data = nextf
       else:
         compress = True
