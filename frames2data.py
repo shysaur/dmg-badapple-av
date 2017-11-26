@@ -185,11 +185,11 @@ def encode(inputimgs, outputfn):
   bi = 1
   overhead = 0
   for blockf, i, nextblocksize in lookahead(generateBlocks(inputimgs)):
-    vprint("\033[1G\033[KOutputting frame %d @ %d:%04X" % \
-          (i+1, bi, len(lastbank) + 0x4000), \
-          end="", flush=True)
-          
     blocksize = len(blockf(False))
+    
+    vprint("\033[1G\033[KOutputting frame %d @ %d:%04X, this block size = %d" % \
+          (i+1, bi, len(lastbank) + 0x4000, blocksize), \
+          end="", flush=True)
     
     if len(lastbank) + blocksize <= 0x4000:
       nextwillofl = len(lastbank) + blocksize + nextblocksize > 0x4000
@@ -245,6 +245,19 @@ def readImages(imagefns):
   
   p = Pool()
   return p.starmap(_processOnePair, imagefnpairs)
+  
+  
+def adjustTimebase(imagefns, timebase):
+  i = 0
+  accum = 0.0
+  res = []
+  while i < len(imagefns):
+    res.append(imagefns[i])
+    accum += timebase
+    if accum >= 1.0:
+      i += int(accum)
+      accum = accum % 1
+  return res
 
 
 def main():
@@ -272,6 +285,9 @@ def main():
   parser.add_argument("-i", "--vblk-bytes", dest="vblkbytes", type=int,
                       default=VBLK_BYTES, help="the amount of video bytes " +
                       "copied in vblank")
+  parser.add_argument("-c", "--timebase", dest="timebase", type=float,
+                      default=1.0, help="the relative speed of the output " +
+                      "(> 1 skips frames, < 1 duplicates frames)")
   options = parser.parse_args()
 
   VERBOSE = options.verbose
@@ -285,6 +301,8 @@ def main():
     allfiles = scanFiles(options.files[0])
   else:
     allfiles = options.files
+  allfiles = adjustTimebase(allfiles, options.timebase)
+  vprint('Adjusted timebase to ', len(allfiles), ' frames')
   vprint('Reading images...')
   encimages = readImages(allfiles)
   
