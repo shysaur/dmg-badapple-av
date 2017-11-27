@@ -244,17 +244,17 @@ VBlank: push af
         push de
         push hl
         
-        ld a,1
-        ldh [FrameFlag],a
+        ld a,1                      ; Tell the main thread that a frame
+        ldh [FrameFlag],a           ; has passed
         
         ld a,[CompressedFlag]
-        cp F_COMPRESSED
-        jp z,.vbl_compression
+        cp F_COMPRESSED             ; If this frame is compressed, go to the
+        jp z,.vbl_compression       ; decompression code
         
         ld hl,CurDestAddr
         ld a,[hl+]
         ld e,a
-        ld d,[hl]
+        ld d,[hl]                   ; Load destination address
         
         ld l,(CurSrcAddr+1) & $FF
         ld a,[hl-]
@@ -269,8 +269,8 @@ VBlank: push af
         ld hl,$4000
         jr .bseA
 .nobsA2:ld a,[hl-]
-.nobsA1:ld l,[hl]
-        ld h,a
+.nobsA1:ld l,[hl]                   ; Load source address or bankswitch
+        ld h,a                      ; if not enough bytes in this bank
         
 .bseA:  REPT BYTES_PER_VBLANK / 4
         ld a,[hl+]
@@ -284,16 +284,31 @@ VBlank: push af
         inc e
         ld a,[hl+]
         ld [de],a
-        inc de
-        ENDR
+        inc de                      ; Copy the uncompressed block via
+        ENDR                        ; unrolled loop
         
         ld a,SCY_OFFSET
-        ldh [$42],a
-        dec a
-        ldh [HBlankSCY],a
-        ld a,$18
-        ldh [HBlankSelfmodJump],a
+        ldh [$42],a                 
+        dec a                       
+        ldh [HBlankSCY],a           ; Reset the scroll and the
+        ld a,$18                    ; counters used by the HBlank thread,
+        ldh [HBlankSelfmodJump],a   ; for the stretch raster effect
         
+        ld c,Cycle & $FF
+        ld a,[c]
+        dec a
+        ld [c],a
+        jr nz,.no_nextcycle
+        
+        ldh a,[BankswitchPending]
+        and a
+        jr z,.nextcycle
+        
+        call NextBank
+        ld hl,$4000
+        jr .nextcycle
+        
+.no_nextcycle:
         ld a,h
         cp ($8000 - 144*BYTES_PER_HLINE) >> 8
         ld a,l
@@ -309,12 +324,7 @@ VBlank: push af
         ld a,h
         ldh [CurSrcAddr+1],a
         
-        ld c,Cycle & $FF
-        ld a,[c]
-        dec a
-        ld [c],a
-        jr z,.nextcycle
-        
+        ldh a,[Cycle]
         rra
         jr c,.nochgpal
         ld a,$F0
@@ -340,11 +350,14 @@ VBlank: push af
         and a
         jr nz,.end_video          ; Stop flag != 0 => end the video
         ld a,[hl+]                ; Read compression flag
+        ld b,a
         ldh [CompressedFlag],a
-        inc hl
+        ld a,[hl+]
+        ldh [BankswitchPending],a
         inc hl
         
-        cp $18
+        ld a,$18
+        cp b
         jr nz,.nc_nofirstcompressedpacket
         
         ld a,[hl+]
