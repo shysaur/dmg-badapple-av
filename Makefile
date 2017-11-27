@@ -3,6 +3,7 @@ RGB_LINK ?=	rgblink
 RGB_AR ?=	rgblib
 CONFIG ?=	0
 FIT ?=	auto
+PULLDOWN ?=	1.0
 
 HEIGHT=144
 VBLKBYTES=144
@@ -48,10 +49,10 @@ $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
 $(OBJDIR)/%.o:	%.asm $(DEPS)
-	$(RGB_AS) -o $@ -D CONFIG=$(CONFIG) $<
+	$(RGB_AS) -o $@ -D CONFIG=$(CONFIG) -D PULLDOWN=$(PULLDOWN) $<
 
 $(OBJDIR)/frames.bin:	$(FRAMESDIR) $(DEPS)
-	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v $(FRAMESDIR)/%d.$(FRAMEEXT)
+	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v $(FRAMESDIR)/%d.$(FRAMEEXT) -c $(PULLDOWN)
 
 $(OBJDIR)/code.bin: 	$(ASM_OBJ) $(DEPS)
 	$(RGB_LINK) -t -o $@ -n $(OUTPUT:.gb=.sym) -m $(OUTPUT:.gb=.map) $(ASM_OBJ)

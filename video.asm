@@ -9,6 +9,11 @@ IF DEF(CONFIG) == 0
 CONFIG EQU 0
 ENDC
 
+IF DEF(PULLDOWN) == 0
+PULLDOWN EQU 1.0
+ENDC
+PULLDOWN_SKIPF EQU (((1.0 - DIV(1.0, PULLDOWN)) + 128) >> 8) & $FF
+
 HSIZE EQU 20
 IF CONFIG == 0
 VSIZE EQU 9
@@ -41,6 +46,8 @@ Cycle:                        DS 1
 CurBank:                      DS 2
 FrameFlag:                    DS 1
 BankswitchPending:            DS 1      ; compressed metaframes only
+PulldownCounter:              DS 1
+CompressedFlagSaved:          DS 1
 
 
         SECTION "stack", WRAM0[$CF00]
@@ -171,6 +178,7 @@ Initialize:
         
         ld a,F_NOT_COMPRESSED
         ldh [CompressedFlag],a          ; The 2nd metaframe must also be literal
+        ldh [CompressedFlagSaved],a
         
         ld bc,4                         ; Skip the second metaframe header
         add hl,bc                       ; (it must be 0,0,0,0)
@@ -247,7 +255,13 @@ VBlank: push af
         ld a,1                      ; Tell the main thread that a frame
         ldh [FrameFlag],a           ; has passed
         
-        ld a,[CompressedFlag]
+        ldh a,[PulldownCounter]
+        add PULLDOWN_SKIPF
+        ldh [PulldownCounter],a
+        jp c,.freeze_frame
+        
+        ldh a,[CompressedFlagSaved]
+        ldh [CompressedFlag],a
         cp F_COMPRESSED             ; If this frame is compressed, go to the
         jp z,.vbl_compression       ; decompression code
         
@@ -352,6 +366,7 @@ VBlank: push af
         ld a,[hl+]                ; Read compression flag
         ld b,a
         ldh [CompressedFlag],a
+        ldh [CompressedFlagSaved],a
         ld a,[hl+]
         ldh [BankswitchPending],a
         inc hl
@@ -407,6 +422,7 @@ VBlank: push af
         ldh [DeltaPacketCount], a   ; When compression is enabled and the delta
         ld a,F_COMPRESSED           ; packet count is zero, the HBlank thread
         ldh [CompressedFlag], a     ; is idle
+        ldh [CompressedFlagSaved], a
         
         pop hl
         pop de
@@ -556,6 +572,24 @@ VBlank: push af
         pop af
         reti
         
+        
+.freeze_frame:
+        xor a
+        ldh [DeltaPacketCount],a
+        ld a,F_COMPRESSED
+        ldh [CompressedFlag],a
+        ld a,SCY_OFFSET
+        ldh [$42],a
+        dec a
+        ldh [HBlankSCY],a
+        ld a,$18
+        ldh [HBlankSelfmodJump],a
+        
+        pop hl
+        pop de
+        pop bc
+        pop af
+        reti
         
 
 HBlankTemplate:
