@@ -604,7 +604,7 @@ HBT_commend:
         ld [hl],d
         
 HBT_endj:                 ; HBlankSelfmodJump
-        jr .end
+        jr HBT_end_noscroll
         ld l,HBlankSCY & $FF          ; A == $18!
         dec [hl]
         ld l,HBlankSelfmodJump & $FF
@@ -614,11 +614,16 @@ HBT_endj:                 ; HBlankSelfmodJump
         pop af
         reti
         
-        REPT 14                   ; Add some padding to make sure that the
+        REPT 10                   ; Add some padding to make sure that the
         nop                       ; jump at HBT_endj has $18 as argument so that
         ENDR                      ; it becomes a ld a,$18 if it's not taken
         
-.end:   ld a,$3E
+HBT_nothing:
+        ld h,$FF
+        jr HBT_endj
+        
+HBT_end_noscroll:
+        ld a,$3E
         ldh [HBlankSelfmodJump],a
         pop hl
         pop de
@@ -629,7 +634,7 @@ HBT_compressed:
         ldh a,[$44]         ; Use LY to count the packets already done
 HBT_counter:                ; CompressionPacketCount - 1
         cp 255
-        jr nc,HBT_commend
+        jr nc,HBT_nothing
         
         ld a,[de]
         inc e
