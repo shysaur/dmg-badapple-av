@@ -104,7 +104,11 @@ Header:
         DB $00          ;CGB flag
         DB 0,0          ;New Licensee Code
         DB 0            ;SGB flag
+        IF DEF(MBC3) == 0
         DB $19          ;Cartridge type
+        ELSE
+        DB $11
+        ENDC
         DB 0            ;ROM size
         DB 0            ;RAM size
         DB $00          ;Destination code
@@ -197,7 +201,9 @@ Initialize:
         ld [$2222],a
         xor a
         ldh [CurBank+1],a               ; Initialize the bank counters & sync
-        ld [$3333],a                    ; them with the MBC (assumed MBC5)
+        IF DEF(MBC3) == 0
+        ld [$3333],a                    ; them with the MBC
+        ENDC
         
         ld a,4                          ; Initialize the frame down-counter
         ldh [Cycle],a                   ; (counts for next metaframe)
@@ -238,11 +244,13 @@ NextBank:
         inc a
         ld [hl+],a
         ld [$2222],a
+        IF DEF(MBC3) == 0
         ret nz
         ld a,[hl]
         inc a
         ld [hl],a
         ld [$3333],a
+        ENDC
         ret
         
         

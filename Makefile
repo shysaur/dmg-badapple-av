@@ -4,6 +4,7 @@ RGB_AR ?=	rgblib
 CONFIG ?=	0
 FIT ?=	auto
 PULLDOWN ?=	1.0
+ASFLAGS +=	
 
 HEIGHT=144
 VBLKBYTES=144
@@ -49,7 +50,7 @@ $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
 $(OBJDIR)/%.o:	%.asm $(DEPS)
-	$(RGB_AS) -o $@ -D CONFIG=$(CONFIG) -D PULLDOWN=$(PULLDOWN) $<
+	$(RGB_AS) -o $@ -D CONFIG=$(CONFIG) -D PULLDOWN=$(PULLDOWN) $(ASFLAGS) $<
 
 $(OBJDIR)/frames.bin:	$(FRAMESDIR) $(DEPS)
 	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v $(FRAMESDIR)/%d.$(FRAMEEXT) -c $(PULLDOWN)
