@@ -212,20 +212,28 @@ Initialize:
         xor a
         ld [SoundChangeBgm],a           ; Initialize sound player
         
+        ld a,$FF
+        ldh [$47],a             ; All black palette
+      
+        ld a,$91
+        ldh [$40],a             ; LCDC on!
+        
+.wfvbl: ldh a,[$44]
+        cp $95                  ; Wait one full frame because the first frame
+        jr nz,.wfvbl            ; may skip one HBlank interrupt
+        
         ld a,$CC
         ldh [$47],a             ; Initialize palette
         ld a,$08
         ldh [$41],a             ; Select HBlank as LCDC interrupt source
         ld a,$03
         ldh [$FF],a             ; Enable LCDC interrupts and VBL interrupts
-        xor a                   ; Clear the interrupt flag (no spurious
-        ldh [$0F],a             ; interrupts please)
         ld a,SCY_OFFSET
         ldh [$42],a             ; Scroll up a bit for creating the bars
-        ei                      ; Interrupts on!
+        xor a                   ; Clear the interrupt flag (no spurious
+        ldh [$0F],a             ; interrupts please)
         
-        ld a,$91
-        ldh [$40],a             ; LCDC on!
+        ei                      ; Interrupts on!
 
 .l2:    ld hl,FrameFlag
         xor a
