@@ -86,6 +86,8 @@ def diffFrames(old, new):
 class Block:
   def __init__(self, body):
     self.body = bytes(body)
+    self.compressed = None
+    self.image = None
     
   def __len__(self):
     return len(self(0, 99))
@@ -100,8 +102,8 @@ class Block:
 def generateBlocksForMetaframe(oldf, nextf):
   class CompressedBlock(Block):
     def __init__(self, body, hasHead):
+      super().__init__(body)
       self.hasHead = hasHead
-      self.body = bytes(body)
       self.compressed = True
       
     def __call__(self, posInBank, bankLength):
@@ -111,8 +113,8 @@ def generateBlocksForMetaframe(oldf, nextf):
              
   class LiteralBlock(Block):
     def __init__(self, body, hasHead):
+      super().__init__(body)
       self.hasHead = hasHead
-      self.body = bytes(body)
       self.compressed = False
       
     def __call__(self, posInBank, bankLength):
@@ -208,6 +210,10 @@ def encode(inputimgs, outputfn):
   banks.append(curBank)
     
   vprint("\033[1G\033[KAllocated", i, "blocks in", len(banks), "banks")
+  n_compressed = sum([1 if block.compressed else 0 for bank in banks for block in bank])
+  vprint("Compressed", n_compressed, 'blocks of', i)
+  c_ratio = 1.0 - sum([len(block) if block.image else 0 for bank in banks for block in bank]) / (len(inputimgs) * (HBLK_BYTES + VBLK_BYTES) * 4)
+  vprint('Compression ratio', c_ratio * 100, '%')
   vprint("Bankswitch overhead = ", overhead)
   
   if outputfn != None:
