@@ -98,30 +98,33 @@ class Block:
     return '<' + type(self).__name__ + ', len=' + str(len(self)) + '>'
   
   
-def generateBlocksForMetaframe(oldf, nextf):
-  class CompressedBlock(Block):
-    def __init__(self, body, hasHead):
-      super().__init__(body)
-      self.hasHead = hasHead
-      self.compressed = True
-      
-    def __call__(self, posInBank, bankLength):
-      mfhead = bytes([0, 0x18, 0, 0]) if self.hasHead else bytes()
-      bhead = bytes([len(self.body)//4, (1 if posInBank == bankLength-1 else 0), 0, 0])
-      return mfhead + bhead + self.body
+class CompressedBlock(Block):
+  def __init__(self, body, hasHead):
+    super().__init__(body)
+    self.hasHead = hasHead
+    self.compressed = True
+    
+  def __call__(self, posInBank, bankLength):
+    mfhead = bytes([0, 0x18, 0, 0]) if self.hasHead else bytes()
+    bhead = bytes([len(self.body)//4, (1 if posInBank == bankLength-1 else 0), 0, 0])
+    return mfhead + bhead + self.body
+         
              
-  class LiteralBlock(Block):
-    def __init__(self, body, hasHead):
-      super().__init__(body)
-      self.hasHead = hasHead
-      self.compressed = False
+class LiteralBlock(Block):
+  def __init__(self, body, hasHead):
+    super().__init__(body)
+    self.hasHead = hasHead
+    self.compressed = False
+    
+  def __call__(self, posInBank, bankLength):
+    mfhead = bytes([0, 0x3E, (1 if posInBank == bankLength-8 else 0), 0]) \
+             if self.hasHead else bytes()
+    return mfhead + self.body
       
-    def __call__(self, posInBank, bankLength):
-      mfhead = bytes([0, 0x3E, (1 if posInBank == bankLength-8 else 0), 0]) \
-               if self.hasHead else bytes()
-      return mfhead + self.body
-    
-    
+  
+def generateBlocksForMetaframe(oldf, nextf):
+  res = []
+  
   if oldf:
     diff = diffFrames(oldf, nextf)
     if len(diff) + 8*4 >= (HBLK_BYTES + VBLK_BYTES) * 4:
@@ -133,7 +136,6 @@ def generateBlocksForMetaframe(oldf, nextf):
   else:
     compress = False
     data = nextf
-  
   
   if compress:    # compressed frame
     # redistribute the dead time across the entirety of the frame
@@ -163,7 +165,7 @@ def generateBlocksForMetaframe(oldf, nextf):
         cur_slice_len = len(data) - prev_slice_end
       
       body = data[prev_slice_end : prev_slice_end+cur_slice_len]
-      yield CompressedBlock(body, i == 0)
+      res.append(CompressedBlock(body, i == 0))
       
       prev_slice_end += cur_slice_len
       
@@ -171,30 +173,38 @@ def generateBlocksForMetaframe(oldf, nextf):
     prev_slice_end = 0
     for cur_slice_len in [HBLK_BYTES, VBLK_BYTES] * 4:
       body = data[prev_slice_end : prev_slice_end+cur_slice_len]
-      yield LiteralBlock(body, prev_slice_end == 0)
+      res.append(LiteralBlock(body, prev_slice_end == 0))
       
       prev_slice_end += cur_slice_len
+  
+  return res
 
   
 def generateBlocks(inputimgs):
+  from multiprocessing import Pool
+  
   metaframes = [None, None]
   metaframes += inputimgs
   
-  for i, oldmf, thismf in zip(itertools.count(0, 2), metaframes[0:], metaframes[2:]):
-    for block in generateBlocksForMetaframe(oldmf, thismf):
-      block.image = i
+  imgpairs = zip(metaframes[0:], metaframes[2:])
+  p = Pool()
+  encimgs = p.starmap(generateBlocksForMetaframe, imgpairs)
+  
+  for blocks in encimgs:
+    for block in blocks:
       yield block
 
   yield Block([1, 0, 0, 0])
 
 
 def encode(inputimgs, outputfn):
+  vprint('Data generation...')
+
   overhead = 0
   
   banks = []
   curBank, curBankSize = [], 0
   for block, i in zip(generateBlocks(inputimgs), itertools.count()):
-    vprint("\033[1G\033[KAllocating block", i, end="", flush=True)
     
     if len(block) + curBankSize > 0x4000:
       overhead += 0x4000 - curBankSize
@@ -208,12 +218,11 @@ def encode(inputimgs, outputfn):
   curBank.append(Block([0] * (0x4000 - curBankSize)))
   banks.append(curBank)
     
-  vprint("\033[1G\033[KAllocated", i, "blocks in", len(banks), "banks")
+  vprint("Allocated", i, "blocks in", len(banks), "banks for", len(inputimgs), "metaframes")
   n_compressed = sum([1 if block.compressed else 0 for bank in banks for block in bank])
-  vprint("Compressed", n_compressed, 'blocks of', i)
   c_ratio = 1.0 - sum([len(block) if block.image else 0 for bank in banks for block in bank]) / (len(inputimgs) * (HBLK_BYTES + VBLK_BYTES) * 4)
-  vprint('Compression ratio', c_ratio * 100, '%')
-  vprint("Bankswitch overhead = ", overhead)
+  vprint("Compressed", n_compressed, 'blocks (global compression ratio', c_ratio * 100, '%)')
+  vprint("Bankswitch overhead", overhead, 'B')
   
   if outputfn != None:
     fpo = open(outputfn, 'wb')
@@ -224,9 +233,7 @@ def encode(inputimgs, outputfn):
     c = len(bank) - 1   # do not count the final padding block
     for block, i in zip(bank, itertools.count()):
       fpo.write(block(i, c))
-  
-  vprint("Wrote", len(banks), "banks")
-    
+      
     
 def scanFiles(fnpattern):
   vprint("Scanning available frames...")
