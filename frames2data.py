@@ -190,8 +190,9 @@ def generateBlocks(inputimgs):
   p = Pool()
   encimgs = p.starmap(generateBlocksForMetaframe, imgpairs)
   
-  for blocks in encimgs:
+  for i, blocks in zip(itertools.count(0, 2), encimgs):
     for block in blocks:
+      block.image = i
       yield block
 
   yield Block([1, 0, 0, 0])
