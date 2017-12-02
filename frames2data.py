@@ -62,24 +62,23 @@ def encodeImagePair(image1, image2):
 def diffFrames(old, new):
   assert len(old) == len(new)
   
-  if len(old) % 3 != 0:
-    pad = bytes([0] * (3 - len(old) % 3))
-    old = bytes(old) + pad
-    new = bytes(new) + pad
-
+  last = bytearray()
   res = bytearray()
   lastskip = 0
   i = 0
-  while old[i:] != new[i:]:
-    p1 = old[i:i+3]
-    p2 = new[i:i+3]
-    if p1 == p2 and lastskip < 255:
-      lastskip += 3
+  while i < len(new):
+    if old[i] == new[i] and lastskip < 255:
+      lastskip += 1
+      i += 1
     else:
-      res += bytes([lastskip])
-      res += p2
+      last += bytes([lastskip])
+      last += new[i:i+3]
+      last += bytes([0] * ((4 - (len(last) % 4)) % 4))
       lastskip = 0
-    i += 3
+      if old[i:i+3] != new[i:i+3]:
+        res += last
+        last = bytearray()
+      i += 3
   return res
   
   
