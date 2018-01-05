@@ -25,34 +25,34 @@ WITH_VOLUME     EQUS "0"
 WITH_ENVRESTART EQUS "SFX_WITH_ENVRESTART"
 ENDC
         
-        IMPORT SoundWaveSamples
-        IMPORT SoundNoisePatches
+        GLOBAL SoundWaveSamples
+        GLOBAL SoundNoisePatches
         
-        IMPORT muschn
-        IMPORT initch
-        IMPORT mread
-        IMPORT mfetch
+        GLOBAL muschn
+        GLOBAL initch
+        GLOBAL mread
+        GLOBAL mfetch
         
-        IMPORT jump
-        IMPORT varset
-        IMPORT notedt
-        IMPORT muscc1
+        GLOBAL jump
+        GLOBAL varset
+        GLOBAL notedt
+        GLOBAL muscc1
         GLOBAL pitchb
         GLOBAL vibrt
         GLOBAL envels
         
 
 IF BGM_MODE
-        EXPORT bgm_chn1w
-        EXPORT bgm_chn2w
-        EXPORT bgm_chn3w
-        EXPORT bgm_chn4w
-        EXPORT bgm_chn1sc
-        EXPORT bgm_chn2sc
-        EXPORT bgm_chn3wf
-        EXPORT bgm_chn4sc
-        EXPORT bgm_musici
-        EXPORT bgm_music       
+        GLOBAL bgm_chn1w
+        GLOBAL bgm_chn2w
+        GLOBAL bgm_chn3w
+        GLOBAL bgm_chn4w
+        GLOBAL bgm_chn1sc
+        GLOBAL bgm_chn2sc
+        GLOBAL bgm_chn3wf
+        GLOBAL bgm_chn4sc
+        GLOBAL bgm_musici
+        GLOBAL bgm_music       
         
 chn1w   EQUS "bgm_chn1w"
 chn2w   EQUS "bgm_chn2w"
@@ -66,27 +66,27 @@ musici  EQUS "bgm_musici"
 music   EQUS "bgm_music"
 
 IF WITH_DYNTRACK
-        EXPORT SoundBgmDynamicSong
+        GLOBAL SoundBgmDynamicSong
 musdsc  EQUS "SoundBgmDynamicSong"
 ENDC
 
 ELSE
-        IMPORT bgm_chn1w
-        IMPORT bgm_chn2w
-        IMPORT bgm_chn3w
-        IMPORT bgm_chn4w
-        IMPORT bgm_chn1sc
-        IMPORT bgm_chn2sc
-        IMPORT bgm_chn3wf
-        IMPORT bgm_chn4sc
-        EXPORT sfx_musici
-        EXPORT sfx_music
+        GLOBAL bgm_chn1w
+        GLOBAL bgm_chn2w
+        GLOBAL bgm_chn3w
+        GLOBAL bgm_chn4w
+        GLOBAL bgm_chn1sc
+        GLOBAL bgm_chn2sc
+        GLOBAL bgm_chn3wf
+        GLOBAL bgm_chn4sc
+        GLOBAL sfx_musici
+        GLOBAL sfx_music
         
 musici  EQUS "sfx_musici"
 music   EQUS "sfx_music"
 
 IF WITH_DYNTRACK
-        EXPORT SoundSfxDynamicSong
+        GLOBAL SoundSfxDynamicSong
 musdsc  EQUS "SoundSfxDynamicSong"
 ENDC
 
@@ -94,9 +94,9 @@ ENDC
         
 
 IF BGM_MODE
-        SECTION "musicdriver_DATA_bgm",BSS
+        SECTION "musicdriver_DATA_bgm",WRAM0
 ELSE
-        SECTION "musicdriver_DATA_sfx",BSS
+        SECTION "musicdriver_DATA_sfx",WRAM0
 ENDC
         
         ;Flags:
@@ -200,15 +200,15 @@ ENDC
 
 IF BGM_MODE
   IF MUSIC_USE_BANKING
-        SECTION "musicdriver_CODE_bgm",CODE[$4000],BANK[MUSIC_PLAYER_BANK]
+        SECTION "musicdriver_CODE_bgm",ROMX[$4000],BANK[MUSIC_PLAYER_BANK]
   ELSE
-        SECTION "musicdriver_CODE_bgm",HOME
+        SECTION "musicdriver_CODE_bgm",ROM0
   ENDC
 ELSE
   IF MUSIC_USE_BANKING
-        SECTION "musicdriver_CODE_sfx",CODE,BANK[MUSIC_PLAYER_BANK]
+        SECTION "musicdriver_CODE_sfx",ROMX,BANK[MUSIC_PLAYER_BANK]
   ELSE
-        SECTION "musicdriver_CODE_sfx",HOME
+        SECTION "musicdriver_CODE_sfx",ROM0
   ENDC
 ENDC
 
@@ -722,9 +722,9 @@ volume: ld b,a
 .noth:  or b                    ;Otherwise merge it with the volume
         ret                     ;Return
         
-.env:   cp $07*2                ;If the result is more than half the speed of
+.env:   cp $07*2                
+        ld a,b                  ;If the result is more than half the speed of
         jr nc,.noe              ;the maximum, return constant volume
-        ld a,b
         or $07                  ;Otherwise return minimum speed
 .noe:   ret                     ;Return
         

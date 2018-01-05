@@ -21,6 +21,13 @@ SFX_WITH_ENVRESTART     EQU 1
 
 MUSIC_PLAYER_BANK       EQU 1
 MUSIC_USE_BANKING       EQU 0   ;Use with "tiny" addressing mode (-t)  
+MUSIC_C_FUNCTS          EQU 0
+
+GBS_TITLE               EQUS "\"1BPP Video\""
+GBS_AUTHOR              EQUS "\"Somebody\""
+GBS_COPYRIGHT           EQUS "\"2018\""
+GBS_NUMSONGS            EQU 1
+GBS_FIRSTSONG           EQU 1
 
 
 ENDC

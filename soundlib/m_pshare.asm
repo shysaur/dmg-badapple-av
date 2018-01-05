@@ -9,12 +9,12 @@ WITH_DYNTRACK   EQUS "(BGM_WITH_DYNTRACK  || SFX_WITH_DYNTRACK  )"
 WITH_ENVSIM     EQUS "(BGM_WITH_VOLUME    || SFX_WITH_ENVRESTART)"        
 
 
-        IMPORT mread
+        GLOBAL mread
 
-        EXPORT jump
-        EXPORT varset
-        EXPORT muscc1
-        EXPORT musp2
+        GLOBAL jump
+        GLOBAL varset
+        GLOBAL muscc1
+        GLOBAL musp2
         
         GLOBAL pitchb
         GLOBAL vibrt
@@ -25,7 +25,7 @@ WITH_ENVSIM     EQUS "(BGM_WITH_VOLUME    || SFX_WITH_ENVRESTART)"
        ENDC
         
        IF WITH_SOFTENVEL
-        IMPORT SoundEnvelopeTable
+        GLOBAL SoundEnvelopeTable
        ENDC
         
         
@@ -51,9 +51,9 @@ c_sc    RB 1    ;restart flag / simulator counter
 
 
 IF MUSIC_USE_BANKING
-        SECTION "musicdriver_CODE_shared",CODE,BANK[MUSIC_PLAYER_BANK]
+        SECTION "musicdriver_CODE_shared",ROMX,BANK[MUSIC_PLAYER_BANK]
 ELSE
-        SECTION "musicdriver_CODE_shared",HOME
+        SECTION "musicdriver_CODE_shared",ROM0
 ENDC
         
         
@@ -187,7 +187,7 @@ vibget: ld de,(c_pb-c_vc)
         ld a,[de]               ;Load the original pitch bend in A
         ret                     ;Return
         
-vibrtt: DB $00, $10, $18, $20, $28, $30, $38, $40
+vibrtt: DB $00, $06, $08, $10, $18, $20, $28, $30, $38, $40
 
         ENDC
         

@@ -1,0 +1,5 @@
+
+INC +=	-i ./sound/
+MDATA_SRC =	sound/musicdata2.asm
+DEPS +=	sound/m_config.inc
+

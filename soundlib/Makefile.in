@@ -1,0 +1,12 @@
+
+INC +=	-i ./soundlib/
+MUSIC_SRC = 	soundlib/m_control.asm \
+	soundlib/m_player.asm \
+	soundlib/m_sfx.asm \
+	soundlib/m_pshare.asm \
+	soundlib/m_cglue.asm
+GBS_SRC =	soundlib/m_gbsglue.asm
+DEPS +=	soundlib/music.inc \
+	soundlib/music.h \
+	soundlib/musicdata.inc
+

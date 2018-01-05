@@ -43,7 +43,7 @@ IF MUSIC_USE_BANKING
 
 ;A sound segment is a non-cross-bank data area which contains music sequences.
 ;The SoundSegmentTable contains pointers to each sound segment, and can be
-;located in any bank (it mustn't cross any bank boundary too). It has the
+;located in any bank (it also mustn't cross any bank boundary). It has the
 ;following format:
 ;
 ;  for each sound segment:

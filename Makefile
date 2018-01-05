@@ -23,21 +23,9 @@ OBJDIR =	obj
 FRAMESDIR ?=	frames
 FRAMEEXT ?=	bmp
 
-ASM_SRC = 	video.asm \
-	utils.asm
-MDATA_SRC =	musicdata2.asm
-MUSIC_SRC = 	m_control.asm \
-	m_player.asm \
-	m_sfx.asm \
-	m_pshare.asm
-GBS_SRC =	m_gbsglue.asm
-	
-DEPS =	video.inc \
-	utils.inc \
-	frames2data.py \
-	m_config.inc \
-	musicdata.inc \
-	music.inc
+include src/Makefile.in
+include sound/Makefile.in
+include soundlib/Makefile.in
 
 MDATA_OBJ =	$(patsubst %, $(OBJDIR)/%, $(MDATA_SRC:.asm=.o))
 MUSIC_OBJ =	$(patsubst %, $(OBJDIR)/%, $(MUSIC_SRC:.asm=.o)) $(MDATA_OBJ)
@@ -48,9 +36,12 @@ all:	$(OBJDIR) $(OUTPUT) $(OUTPUT_GBS)
 
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
+	mkdir -p $(OBJDIR)/src
+	mkdir -p $(OBJDIR)/sound
+	mkdir -p $(OBJDIR)/soundlib
 
 $(OBJDIR)/%.o:	%.asm $(DEPS)
-	$(RGB_AS) -o $@ -D CONFIG=$(CONFIG) -D PULLDOWN=$(PULLDOWN) $(ASFLAGS) $<
+	$(RGB_AS) $(INC) -o $@ -D CONFIG=$(CONFIG) -D PULLDOWN=$(PULLDOWN) $(ASFLAGS) $<
 
 $(OBJDIR)/frames.bin:	$(FRAMESDIR) $(DEPS)
 	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v $(FRAMESDIR)/%d.$(FRAMEEXT) -c $(PULLDOWN)
@@ -68,5 +59,5 @@ $(OUTPUT_GBS): 	$(GBS_OBJ)
 	dd bs=1 if=$(OBJDIR)/gbs.bin of=$@ skip=$$BASE
 
 clean:
-	rm -f $(OBJDIR)/*
-	rm -f *.lst *.map *.gb *~ *.rel *.cdb *.ihx *.lnk *.sym
+	rm -r -f $(OBJDIR)
+	rm -f *.lst *.map *.gb *~ *.rel *.cdb *.ihx *.lnk *.sym *.gbs

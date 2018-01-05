@@ -4,29 +4,31 @@
         INCLUDE "music.inc"
         
         
-        IMPORT SoundSegmentTable
+        GLOBAL SoundSegmentTable
         
-        IMPORT bgm_music
-        IMPORT bgm_musici
+        GLOBAL bgm_music
+        GLOBAL bgm_musici
 IF BUILD_SFX
-        IMPORT sfx_music
-        IMPORT sfx_musici
+        GLOBAL sfx_music
+        GLOBAL sfx_musici
 ENDC
 
-        EXPORT muschn
-        EXPORT initch
-        EXPORT mfetch
-        EXPORT mread
+        GLOBAL muschn
+        GLOBAL initch
+        GLOBAL mfetch
+        GLOBAL mread
         
         
-        SECTION "musicdriver_util_var",BSS
+        SECTION "musicdriver_util_var",WRAM0
         
         
 SoundChangeBgm:
 muschn:           DS 1    ;WRITE HERE TO CHANGE SONG
 musson:           DS 1    ;Currently playing song (change this to restart song)
+IF BUILD_SFX
 SoundChangeSfx:
 sfxtrg:           DS 1    ;Write here to trigger SFX
+ENDC
 
 IF MUSIC_USE_BANKING
 musbnk: DS 1
@@ -37,7 +39,7 @@ ENDC
 mread:  DS 3    ;Read buffer
         
         
-        SECTION "musicdriver_util_CODE", HOME
+        SECTION "musicdriver_util_CODE", ROM0
         
         
         
@@ -58,7 +60,8 @@ SoundFrame:
        ENDC
         call bgm_musici         ;Initialize the sound player
         
-.sfxc:  ld a,[sfxtrg]
+.sfxc: IF BUILD_SFX
+        ld a,[sfxtrg]
         cp $FE
         jr z,.play              ;If no SFX to trigger, continue playing
         
@@ -72,14 +75,19 @@ SoundFrame:
         call sfx_musici         ;Initialize the sound player
         ld a,$FE
         ld [sfxtrg],a           ;Reset the trigger variable
+       ENDC
         
 .play: IF MUSIC_USE_BANKING
         ld a,MUSIC_PLAYER_BANK
         ld [$2222],a            ;Switch to the sound player's bank
+       ENDC
+       IF BUILD_SFX
+       IF MUSIC_USE_BANKING
         ld a,[sfxbnk]
         ld [tmpbnk],a
        ENDC
-        call sfx_music      
+        call sfx_music    
+       ENDC  
        IF MUSIC_USE_BANKING    
         ld a,[musbnk]
         ld [tmpbnk],a
@@ -144,7 +152,9 @@ SoundReset:
         ld [musson],a           ;Ensure that old song register != muschn
         inc a
         ld [muschn],a           ;Init song number register
+       IF BUILD_SFX
         ld [sfxtrg],a           ;Silence SFX
+       ENDC
         ld a,$77
         ldh [$24],a             ;Set maximum volume
         ld a,$FF
