@@ -2,7 +2,6 @@
 
         INCLUDE "video.inc"
         INCLUDE "utils.inc"
-        INCLUDE "music.inc"
         
         
 IF DEF(CONFIG) == 0
@@ -208,10 +207,6 @@ Initialize:
         ld a,4                          ; Initialize the frame down-counter
         ldh [Cycle],a                   ; (counts for next metaframe)
         
-        call SoundReset
-        xor a
-        ld [SoundChangeBgm],a           ; Initialize sound player
-        
         ld a,$FF
         ldh [$47],a             ; All black palette
       
@@ -241,7 +236,6 @@ Initialize:
         cp [hl]
         jr z,.l                 ; Wait for next VBlank
         ld [hl],a
-        call SoundFrame         ; Update sound at every frame
         jr .l2
         
         

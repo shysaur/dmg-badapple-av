@@ -18,27 +18,19 @@ ifeq ($(CONFIG),2)
 endif
 
 OUTPUT=video.gb
-OUTPUT_GBS=music.gbs
 OBJDIR=obj
 FRAMESDIR?=frames
 FRAMEEXT?=bmp
 
 include src/Makefile.in
-include sound/Makefile.in
-include soundlib/Makefile.in
 
-MDATA_OBJ:=$(patsubst %, $(OBJDIR)/%, $(MDATA_SRC:.asm=.o))
-MUSIC_OBJ:=$(patsubst %, $(OBJDIR)/%, $(MUSIC_SRC:.asm=.o)) $(MDATA_OBJ)
-GBS_OBJ:=$(patsubst %, $(OBJDIR)/%, $(GBS_SRC:.asm=.o)) $(MUSIC_OBJ) 
-ASM_OBJ:=$(patsubst %, $(OBJDIR)/%, $(ASM_SRC:.asm=.o)) $(MUSIC_OBJ)
+ASM_OBJ=$(patsubst %, $(OBJDIR)/%, $(ASM_SRC:.asm=.o)) $(MUSIC_OBJ)
 	
 all: $(OBJDIR) $(OUTPUT) $(OUTPUT_GBS)
 
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 	mkdir -p $(OBJDIR)/src
-	mkdir -p $(OBJDIR)/sound
-	mkdir -p $(OBJDIR)/soundlib
 
 $(OBJDIR)/%.o: %.asm $(DEPS)
 	$(RGB_AS) $(INC) -o $@ -D CONFIG=$(CONFIG) -D PULLDOWN=$(PULLDOWN) $(ASFLAGS) $<
@@ -52,11 +44,6 @@ $(OBJDIR)/code.bin: $(ASM_OBJ) $(DEPS)
 $(OUTPUT): $(OBJDIR)/frames.bin $(OBJDIR)/code.bin
 	dd bs=16384 count=1 if=$(OBJDIR)/code.bin | cat - $(OBJDIR)/frames.bin > $@
 	rgbfix -p00 -v $@
-
-$(OUTPUT_GBS): $(GBS_OBJ)
-	$(RGB_LINK) -o $(OBJDIR)/gbs.bin -n $(OBJDIR)/gbs.sym $(GBS_OBJ)
-	BASE=$$((16#$$(grep _head $(OBJDIR)/gbs.sym | cut -c 4-7))); \
-	dd bs=1 if=$(OBJDIR)/gbs.bin of=$@ skip=$$BASE
 
 clean:
 	rm -r -f $(OBJDIR)
