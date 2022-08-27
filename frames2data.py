@@ -23,24 +23,24 @@ def vprint(*args, **kwargs):
   if VERBOSE == True: print(*args, file=sys.stderr, **kwargs)
   
   
-def prepareImage(filename):
+def prepareImage(opts, filename):
   image = Image.open(filename).convert("L")
-  if ASPECT != 'no':
+  if opts.aspect != 'no':
     # auto chooses the fit that fills the whole screen
-    bestfit_is_vert = (image.width / image.height * HEIGHT) >= WIDTH
+    bestfit_is_vert = (image.width / image.height * opts.height) >= opts.width
     
-    if ASPECT == 'fit-vertical' or (ASPECT == 'auto' and bestfit_is_vert):
-      destw = WIDTH * image.height // HEIGHT
+    if opts.aspect == 'fit-vertical' or (opts.aspect == 'auto' and bestfit_is_vert):
+      destw = opts.width * image.height // opts.height
       desth = image.height
-    elif ASPECT == 'fit-horizontal' or (ASPECT == 'auto' and not bestfit_is_vert):
+    elif opts.aspect == 'fit-horizontal' or (opts.aspect == 'auto' and not bestfit_is_vert):
       destw = image.width
-      desth = HEIGHT * image.width // WIDTH
+      desth = opts.height * image.width // opts.width
       
     tmp = Image.new("L", (destw, desth))
     tmp.paste(image, ((destw - image.width) // 2, (desth - image.height) // 2))
     image = tmp
   
-  image = image.resize((WIDTH, HEIGHT//2), Image.BILINEAR)
+  image = image.resize((opts.width, opts.height//2), Image.BILINEAR)
   return ImageOps.invert(image).convert("1", None, Image.NONE)
 
 
@@ -122,12 +122,12 @@ class LiteralBlock(Block):
     return mfhead + self.body
       
   
-def generateBlocksForMetaframe(oldf, nextf):
+def generateBlocksForMetaframe(opts, oldf, nextf):
   res = []
   
   if oldf:
     diff = diffFrames(oldf, nextf)
-    if len(diff) + 8*4 >= (HBLK_BYTES + VBLK_BYTES) * 4:
+    if len(diff) + 8*4 >= (opts.hblkbytes + opts.vblkbytes) * 4:
       compress = False
       data = nextf
     else:
@@ -171,7 +171,7 @@ def generateBlocksForMetaframe(oldf, nextf):
       
   else:     # literal frame
     prev_slice_end = 0
-    for cur_slice_len in [HBLK_BYTES, VBLK_BYTES] * 4:
+    for cur_slice_len in [opts.hblkbytes, opts.vblkbytes] * 4:
       body = data[prev_slice_end : prev_slice_end+cur_slice_len]
       res.append(LiteralBlock(body, prev_slice_end == 0))
       
@@ -180,13 +180,13 @@ def generateBlocksForMetaframe(oldf, nextf):
   return res
 
   
-def generateBlocks(inputimgs):
+def generateBlocks(opts, inputimgs):
   from multiprocessing import Pool
   
   metaframes = [None, None]
   metaframes += inputimgs
   
-  imgpairs = zip(metaframes[0:], metaframes[2:])
+  imgpairs = [(opts, a, b) for a, b in zip(metaframes[0:], metaframes[2:])]
   p = Pool()
   encimgs = p.starmap(generateBlocksForMetaframe, imgpairs)
   
@@ -198,14 +198,14 @@ def generateBlocks(inputimgs):
   yield Block([1, 0, 0, 0])
 
 
-def encode(inputimgs, outputfn):
+def encode(opts, inputimgs, outputfn):
   vprint('Data generation...')
 
   overhead = 0
   
   banks = []
   curBank, curBankSize = [], 0
-  for block, i in zip(generateBlocks(inputimgs), itertools.count()):
+  for block, i in zip(generateBlocks(opts, inputimgs), itertools.count()):
     
     if len(block) + curBankSize > 0x4000:
       overhead += 0x4000 - curBankSize
@@ -221,7 +221,7 @@ def encode(inputimgs, outputfn):
     
   vprint("Allocated", i, "blocks in", len(banks), "banks for", len(inputimgs), "metaframes")
   n_compressed = sum([1 if block.compressed else 0 for bank in banks for block in bank])
-  c_ratio = 1.0 - sum([len(block) if block.image else 0 for bank in banks for block in bank]) / (len(inputimgs) * (HBLK_BYTES + VBLK_BYTES) * 4)
+  c_ratio = 1.0 - sum([len(block) if block.image else 0 for bank in banks for block in bank]) / (len(inputimgs) * (opts.hblkbytes + opts.vblkbytes) * 4)
   vprint("Compressed", n_compressed, 'blocks (global compression ratio', c_ratio * 100, '%)')
   vprint("Bankswitch overhead", overhead, 'B')
   
@@ -249,18 +249,18 @@ def scanFiles(fnpattern):
   return allfiles
   
   
-def _processOnePair(fn1, fn2):
-  image1 = prepareImage(fn1)
-  image2 = prepareImage(fn2)
+def _processOnePair(opts, fn1, fn2):
+  image1 = prepareImage(opts, fn1)
+  image2 = prepareImage(opts, fn2)
   return encodeImagePair(image1, image2)
     
-def readImages(imagefns):
+def readImages(opts, imagefns):
   from multiprocessing import Pool
-  
-  imagefnpairs = list(zip(imagefns[0::2], imagefns[1::2]))
-  # duplicate the last image twice because when the video stops the player will 
+
+  imagefnpairs = list([(opts, b, c) for b, c in zip(imagefns[0::2], imagefns[1::2])])
+  # duplicate the last image twice because when the video stops the player will
   # freeze before switching to the last metaframe
-  imagefnpairs.append((imagefns[-1], imagefns[-1]))
+  imagefnpairs.append((opts, imagefns[-1], imagefns[-1]))
   
   p = Pool()
   return p.starmap(_processOnePair, imagefnpairs)
@@ -298,34 +298,35 @@ def main():
                       default='auto', help="specifies if and how to scale each " +
                       "frame to make them fit the screen")
   parser.add_argument("-x", "--width", dest="width", type=int,
-                      default=WIDTH, help="the encoded video's width")
+                      default=160, help="the encoded video's width")
   parser.add_argument("-y", "--height", dest="height", type=int,
-                      default=HEIGHT, help="the encoded video's height")
+                      default=144, help="the encoded video's height")
   parser.add_argument("-i", "--vblk-bytes", dest="vblkbytes", type=int,
-                      default=VBLK_BYTES, help="the amount of video bytes " +
+                      default=144, help="the amount of video bytes " +
                       "copied in vblank")
   parser.add_argument("-c", "--timebase", dest="timebase", type=float,
                       default=1.0, help="the relative speed of the output " +
                       "(> 1 skips frames, < 1 duplicates frames)")
-  options = parser.parse_args()
-
-  VERBOSE = options.verbose
-  ASPECT = options.aspect
-  WIDTH = options.width
-  HEIGHT = options.height
-  VBLK_BYTES = options.vblkbytes
-  HBLK_BYTES = ((WIDTH // 8) * ((HEIGHT // 2) // 8)) * 16 // 4 - VBLK_BYTES
+  opts = parser.parse_args()
   
-  if len(options.files) == 1:
-    allfiles = scanFiles(options.files[0])
+  VERBOSE = opts.verbose
+  #ASPECT = options.aspect
+  #WIDTH = options.width
+  #HEIGHT = options.height
+  #VBLK_BYTES = options.vblkbytes
+  #HBLK_BYTES = ((WIDTH // 8) * ((HEIGHT // 2) // 8)) * 16 // 4 - VBLK_BYTES
+  opts.hblkbytes = ((opts.width // 8) * ((opts.height // 2) // 8)) * 16 // 4 - opts.vblkbytes
+  
+  if len(opts.files) == 1:
+    allfiles = scanFiles(opts.files[0])
   else:
-    allfiles = options.files
-  allfiles = adjustTimebase(allfiles, options.timebase)
+    allfiles = opts.files
+  allfiles = adjustTimebase(allfiles, opts.timebase)
   vprint('Adjusted timebase to ', len(allfiles), ' frames')
   vprint('Reading images...')
-  encimages = readImages(allfiles)
+  encimages = readImages(opts, allfiles)
   
-  encode(encimages, options.outputfn)
+  encode(opts, encimages, opts.outputfn)
   
 
 if __name__ == "__main__":
