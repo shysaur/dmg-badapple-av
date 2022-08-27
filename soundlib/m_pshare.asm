@@ -9,23 +9,23 @@ WITH_DYNTRACK   EQUS "(BGM_WITH_DYNTRACK  || SFX_WITH_DYNTRACK  )"
 WITH_ENVSIM     EQUS "(BGM_WITH_VOLUME    || SFX_WITH_ENVRESTART)"        
 
 
-        GLOBAL mread
+        EXPORT mread
 
-        GLOBAL jump
-        GLOBAL varset
-        GLOBAL muscc1
-        GLOBAL musp2
+        EXPORT jump
+        EXPORT varset
+        EXPORT muscc1
+        EXPORT musp2
         
-        GLOBAL pitchb
-        GLOBAL vibrt
-        GLOBAL envels
+        EXPORT pitchb
+        EXPORT vibrt
+        EXPORT envels
         
        IF WITH_ENVSIM
-        GLOBAL envsim
+        EXPORT envsim
        ENDC
         
        IF WITH_SOFTENVEL
-        GLOBAL SoundEnvelopeTable
+        EXPORT SoundEnvelopeTable
        ENDC
         
         

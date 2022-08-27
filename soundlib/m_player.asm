@@ -25,34 +25,34 @@ WITH_VOLUME     EQUS "0"
 WITH_ENVRESTART EQUS "SFX_WITH_ENVRESTART"
 ENDC
         
-        GLOBAL SoundWaveSamples
-        GLOBAL SoundNoisePatches
+        EXPORT SoundWaveSamples
+        EXPORT SoundNoisePatches
         
-        GLOBAL muschn
-        GLOBAL initch
-        GLOBAL mread
-        GLOBAL mfetch
+        EXPORT muschn
+        EXPORT initch
+        EXPORT mread
+        EXPORT mfetch
         
-        GLOBAL jump
-        GLOBAL varset
-        GLOBAL notedt
-        GLOBAL muscc1
-        GLOBAL pitchb
-        GLOBAL vibrt
-        GLOBAL envels
+        EXPORT jump
+        EXPORT varset
+        EXPORT notedt
+        EXPORT muscc1
+        EXPORT pitchb
+        EXPORT vibrt
+        EXPORT envels
         
 
 IF BGM_MODE
-        GLOBAL bgm_chn1w
-        GLOBAL bgm_chn2w
-        GLOBAL bgm_chn3w
-        GLOBAL bgm_chn4w
-        GLOBAL bgm_chn1sc
-        GLOBAL bgm_chn2sc
-        GLOBAL bgm_chn3wf
-        GLOBAL bgm_chn4sc
-        GLOBAL bgm_musici
-        GLOBAL bgm_music       
+        EXPORT bgm_chn1w
+        EXPORT bgm_chn2w
+        EXPORT bgm_chn3w
+        EXPORT bgm_chn4w
+        EXPORT bgm_chn1sc
+        EXPORT bgm_chn2sc
+        EXPORT bgm_chn3wf
+        EXPORT bgm_chn4sc
+        EXPORT bgm_musici
+        EXPORT bgm_music       
         
 chn1w   EQUS "bgm_chn1w"
 chn2w   EQUS "bgm_chn2w"
@@ -66,27 +66,27 @@ musici  EQUS "bgm_musici"
 music   EQUS "bgm_music"
 
 IF WITH_DYNTRACK
-        GLOBAL SoundBgmDynamicSong
+        EXPORT SoundBgmDynamicSong
 musdsc  EQUS "SoundBgmDynamicSong"
 ENDC
 
 ELSE
-        GLOBAL bgm_chn1w
-        GLOBAL bgm_chn2w
-        GLOBAL bgm_chn3w
-        GLOBAL bgm_chn4w
-        GLOBAL bgm_chn1sc
-        GLOBAL bgm_chn2sc
-        GLOBAL bgm_chn3wf
-        GLOBAL bgm_chn4sc
-        GLOBAL sfx_musici
-        GLOBAL sfx_music
+        EXPORT bgm_chn1w
+        EXPORT bgm_chn2w
+        EXPORT bgm_chn3w
+        EXPORT bgm_chn4w
+        EXPORT bgm_chn1sc
+        EXPORT bgm_chn2sc
+        EXPORT bgm_chn3wf
+        EXPORT bgm_chn4sc
+        EXPORT sfx_musici
+        EXPORT sfx_music
         
 musici  EQUS "sfx_musici"
 music   EQUS "sfx_music"
 
 IF WITH_DYNTRACK
-        GLOBAL SoundSfxDynamicSong
+        EXPORT SoundSfxDynamicSong
 musdsc  EQUS "SoundSfxDynamicSong"
 ENDC
 
@@ -261,7 +261,8 @@ musici: ld d,h
         ;To implement fractional speed control, the sequence parsing code is 
         ;called the number of times specified in mussl1 and mussl2, interpreted
         ;as a 8.8 fixed point number. The fractional part error is in musslw.
-music: IF WITH_FRACSPEED
+music: 
+       IF WITH_FRACSPEED
         ld hl,mussl2
         ld a,[hl+]
         ld l,[hl]
@@ -306,7 +307,8 @@ musicd: ld a,[chn4w]            ;   Channel 4
         dec [hl]                ;Decrement channel 4 timer
         call z,music4           ;Play next note if current note finished
 
-.pe:   IF WITH_FRACSPEED
+.pe:   
+       IF WITH_FRACSPEED
         pop hl
         jr mustml               ;Loop
        ENDC
@@ -314,7 +316,8 @@ musicd: ld a,[chn4w]            ;   Channel 4
         ;   Do background tasks (vibrato, software envelope, ...) for all
         ;   channels, and then update the hardware registers.
         
-setchn:IF WITH_VOLUME
+setchn:
+       IF WITH_VOLUME
         ld a,[musvol]
         ld hl,musvo2
         cp [hl]
@@ -394,7 +397,8 @@ set0:   ld a,[chn1w]
         ldh [$14],a             ;Reload high frequency byte and restart flag
         jr .tail                ;Continue to next channel
         
-.stop: IF SFX_MODE
+.stop: 
+       IF SFX_MODE
         ld hl,bgm_chn1w
         res 4,[hl]   
        IF WITH_ENVRESTART
@@ -488,7 +492,8 @@ set1:   ld a,[chn2w]
         ldh [$19],a             ;Reload high frequency byte and restart flag
         jr .tail                ;Continue to next channel
         
-.stop: IF SFX_MODE
+.stop: 
+       IF SFX_MODE
         ld hl,bgm_chn2w
         res 4,[hl]   
        IF WITH_ENVRESTART
@@ -574,7 +579,8 @@ set2:   ld a,[chn3w]
         ldh [$1E],a             ;(no restart for chn3)
         jr .tail                ;Continue to next channel
        
-.stop: IF SFX_MODE
+.stop: 
+       IF SFX_MODE
         ld hl,bgm_chn3w
         res 4,[hl]              
         ld hl,bgm_chn3wf
@@ -646,7 +652,8 @@ set3:   ld a,[chn4w]
         ldh [$23],a             ;Restart the channel on step change
         jr .tail                ;Done updating all the channels: return.
         
-.stop: IF SFX_MODE
+.stop: 
+       IF SFX_MODE
         ld hl,bgm_chn4w
         res 4,[hl]             
        IF WITH_ENVRESTART
@@ -673,7 +680,8 @@ set3:   ld a,[chn4w]
 .tail:  ld hl,chn4ut
         inc [hl]                ;Increment effects counter
         
-setout:IF SFX_MODE || (!BGM_WITH_VOLUME && !SFX_WITH_ENVRESTART)
+setout:
+       IF SFX_MODE || (!BGM_WITH_VOLUME && !SFX_WITH_ENVRESTART)
         xor a
         ld [chn1sc],a
         ld [chn2sc],a

@@ -18,13 +18,13 @@ INCLUDE "m_config.inc"
 ;the sequence frame (which can be modified using the SET_SPEED commands),
 ;but it always corresponds to 1.0 sequence frames (~1/60 sec).
 
-GLOBAL SoundEnvelopeTable
+EXPORT SoundEnvelopeTable
 
 
 ;SoundWaveSamples points to a linear array of 16-byte waveforms to use for
 ;channel 3.
 
-GLOBAL SoundWaveSamples
+EXPORT SoundWaveSamples
 
 
 ;SoundNoisePatches points to a linear array of 16-bit noise patches used by
@@ -36,7 +36,7 @@ GLOBAL SoundWaveSamples
 ;In SoundNoisePatches you can add up to 6*12=72 patches, which are played
 ;corresponding to each of the 72 notes available.
 
-GLOBAL SoundNoisePatches
+EXPORT SoundNoisePatches
 
 
 IF MUSIC_USE_BANKING
@@ -69,14 +69,14 @@ IF MUSIC_USE_BANKING
 ;This header is present if and only if the sequence data is pointed by
 ;the song's pointer group!
 
-GLOBAL SoundSegmentTable
+EXPORT SoundSegmentTable
 
 ELSE
 
 ;When banking is disabled (MUSIC_USE_BANKING == 0), SoundSegmentTable is
 ;not used because no bank switch is needed; instead, directly declare the song
 ;pointer table as SoundSongTable.
-GLOBAL SoundSongTable
+EXPORT SoundSongTable
 
 ENDC
 

@@ -1,6 +1,8 @@
 
-INC +=	-i ./src/
-ASM_SRC =	src/video.asm \
-	src/utils.asm
-DEPS +=	src/utils.inc \
-	src/video.inc
+INC += -i ./src/
+ASM_SRC = \
+  src/video.asm \
+  src/utils.asm
+DEPS += \
+  src/utils.inc \
+  src/video.inc

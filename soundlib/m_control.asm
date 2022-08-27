@@ -4,19 +4,19 @@
         INCLUDE "music.inc"
         
         
-        GLOBAL SoundSegmentTable
+        EXPORT SoundSegmentTable
         
-        GLOBAL bgm_music
-        GLOBAL bgm_musici
+        EXPORT bgm_music
+        EXPORT bgm_musici
 IF BUILD_SFX
-        GLOBAL sfx_music
-        GLOBAL sfx_musici
+        EXPORT sfx_music
+        EXPORT sfx_musici
 ENDC
 
-        GLOBAL muschn
-        GLOBAL initch
-        GLOBAL mfetch
-        GLOBAL mread
+        EXPORT muschn
+        EXPORT initch
+        EXPORT mfetch
+        EXPORT mread
         
         
         SECTION "musicdriver_util_var",WRAM0
@@ -60,7 +60,8 @@ SoundFrame:
        ENDC
         call bgm_musici         ;Initialize the sound player
         
-.sfxc: IF BUILD_SFX
+.sfxc: 
+       IF BUILD_SFX
         ld a,[sfxtrg]
         cp $FE
         jr z,.play              ;If no SFX to trigger, continue playing
@@ -77,7 +78,8 @@ SoundFrame:
         ld [sfxtrg],a           ;Reset the trigger variable
        ENDC
         
-.play: IF MUSIC_USE_BANKING
+.play: 
+       IF MUSIC_USE_BANKING
         ld a,MUSIC_PLAYER_BANK
         ld [$2222],a            ;Switch to the sound player's bank
        ENDC
@@ -114,7 +116,8 @@ gsptrs: cp $FF
         jr .loop                
        ENDC
         
-.found:IF MUSIC_USE_BANKING
+.found:
+      IF MUSIC_USE_BANKING
         ld c,a                  ;Save the song's index in this segment's table
         inc hl
         ld a,[hl+]              ;Get the segment's bank
@@ -165,7 +168,8 @@ SoundReset:
         
         ;   Initialize single channel 
         ;(HL=array of 4 pointers, DE=addr. of sequence pointer)
-initch:IF MUSIC_USE_BANKING
+initch:
+       IF MUSIC_USE_BANKING
         ld a,[tmpbnk]
         ld [$2222],a            ;Switch to song data bank
        ENDC
@@ -250,7 +254,8 @@ initch:IF MUSIC_USE_BANKING
         
         ;   Fetch 4 bytes of sequence data, pointed by HL in the BGM sequence
         ;data bank.
-mfetch:IF MUSIC_USE_BANKING
+mfetch:
+       IF MUSIC_USE_BANKING
         ld a,[tmpbnk]
         ld [$2222],a            ;Switch to song data bank
        ENDC

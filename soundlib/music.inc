@@ -3,27 +3,27 @@
 INCLUDE "m_config.inc"
 
 
-GLOBAL SoundReset
-GLOBAL SoundFrame
+EXPORT SoundReset
+EXPORT SoundFrame
 
 
-GLOBAL SoundChangeBgm
+EXPORT SoundChangeBgm
 
 IF BGM_WITH_VOLUME
-GLOBAL SoundBgmAttenuation
+EXPORT SoundBgmAttenuation
 ENDC
 
 IF BGM_WITH_DYNTRACK
-GLOBAL SoundBgmDynamicSong
+EXPORT SoundBgmDynamicSong
 ENDC
 
 
 IF BUILD_SFX
 
-GLOBAL SoundChangeSfx
+EXPORT SoundChangeSfx
 
 IF SFX_WITH_DYNTRACK
-GLOBAL SoundSfxDynamicSong
+EXPORT SoundSfxDynamicSong
 ENDC
 
 ENDC

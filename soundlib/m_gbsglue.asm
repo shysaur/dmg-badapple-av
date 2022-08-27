@@ -1,6 +1,6 @@
 
 
-        GLOBAL _head
+        EXPORT _head
 
         INCLUDE "music.inc"
         INCLUDE "m_config.inc"

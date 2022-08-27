@@ -1,11 +1,11 @@
 
-GLOBAL Copy
-GLOBAL ReverseCopy
-GLOBAL RectCopy
-GLOBAL RectFill
-GLOBAL MakePictureRectangle1
-GLOBAL MakePictureRectangle2
-GLOBAL MakePictureRectangle3
-GLOBAL Fill
-GLOBAL ColumnFill
+EXPORT Copy
+EXPORT ReverseCopy
+EXPORT RectCopy
+EXPORT RectFill
+EXPORT MakePictureRectangle1
+EXPORT MakePictureRectangle2
+EXPORT MakePictureRectangle3
+EXPORT Fill
+EXPORT ColumnFill
 

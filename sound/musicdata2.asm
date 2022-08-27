@@ -3,9 +3,9 @@
         INCLUDE "musicdata.inc"
 
 IF MUSIC_USE_BANKING
-        SECTION "musicdriver_config_DATA",DATA,BANK[MUSIC_PLAYER_BANK]
+        SECTION "musicdriver_config_DATA",ROMX,BANK[MUSIC_PLAYER_BANK]
 ELSE
-        SECTION "musicdriver_config_DATA",HOME
+        SECTION "musicdriver_config_DATA",ROM0
 ENDC
         
         
@@ -78,9 +78,9 @@ ENDC
         
 
 IF MUSIC_USE_BANKING
-        SECTION "music_DATA",DATA,BANK[2]
+        SECTION "music_DATA",ROMX,BANK[2]
 ELSE
-        SECTION "music_DATA",HOME
+        SECTION "music_DATA",ROM0
 ENDC
 
 SoundSongTable:

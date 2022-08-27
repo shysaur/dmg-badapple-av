@@ -302,7 +302,8 @@ VBlank: push af
 .nobsA1:ld l,[hl]                   ; Load source address or bankswitch
         ld h,a                      ; if not enough bytes in this bank
         
-.bseA:  REPT BYTES_PER_VBLANK / 4
+.bseA:  
+        REPT BYTES_PER_VBLANK / 4
         ld a,[hl+]
         ld [de],a
         inc e
