@@ -21,8 +21,11 @@ OUTPUT=video.gb
 OBJDIR=obj
 FRAMESDIR?=frames
 FRAMEEXT?=bmp
+SOUND?=sound.flac
 
 include src/Makefile.in
+
+DEFS += $(OBJDIR)/video.inc
 
 ASM_OBJ=$(patsubst %, $(OBJDIR)/%, $(ASM_SRC:.asm=.o)) $(MUSIC_OBJ)
 	
@@ -35,14 +38,18 @@ $(OBJDIR):
 $(OBJDIR)/%.o: %.asm $(DEPS)
 	$(RGB_AS) $(INC) -o $@ -D CONFIG=$(CONFIG) -D PULLDOWN=$(PULLDOWN) $(ASFLAGS) $<
 
-$(OBJDIR)/frames.bin: $(FRAMESDIR) $(DEPS)
-	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v $(FRAMESDIR)/%d.$(FRAMEEXT) -c $(PULLDOWN)
+$(OBJDIR)/video.inc: $(OBJDIR)/frames.bin
+$(OBJDIR)/frames.bin: $(FRAMESDIR)
+	./frames2data.py -o $@ -y $(HEIGHT) -i $(VBLKBYTES) -p $(FIT) -v $(FRAMESDIR)/%d.$(FRAMEEXT) -c $(PULLDOWN) -d $(OBJDIR)/frames.inc
+
+$(OBJDIR)/sound.bin: $(SOUND)
+	./wav2data.py $< $@
 
 $(OBJDIR)/code.bin: $(ASM_OBJ) $(DEPS)
 	$(RGB_LINK) -t -o $@ -n $(OUTPUT:.gb=.sym) -m $(OUTPUT:.gb=.map) $(ASM_OBJ)
 
-$(OUTPUT): $(OBJDIR)/frames.bin $(OBJDIR)/code.bin
-	dd bs=16384 count=1 if=$(OBJDIR)/code.bin | cat - $(OBJDIR)/frames.bin > $@
+$(OUTPUT): $(OBJDIR)/frames.bin $(OBJDIR)/code.bin $(OBJDIR)/sound.bin
+	dd bs=16384 count=1 if=$(OBJDIR)/code.bin | cat - $(OBJDIR)/frames.bin $(OBJDIR)/sound.bin > $@
 	rgbfix -p00 -v $@
 
 clean:

@@ -4,7 +4,9 @@
         INCLUDE "utils.inc"
         INCLUDE "obj/frames.inc"
                 
-        
+
+; Video defines
+
 IF DEF(CONFIG) == 0
 CONFIG EQU 0
 ENDC
@@ -35,9 +37,15 @@ IF ((BYTES_PER_VBLANK % 4) != 0) || ((BYTES_PER_HLINE * 144) % 4 != 0)
   FAIL "BYTES_PER_VBLANK & BYTES_PER_HLINE * 144 must be multiples of 4"
 ENDC
 
-
 F_COMPRESSED                EQU $18
 F_NOT_COMPRESSED            EQU $3E
+
+; Audio defines
+
+DEF CLK_PER_SA = 314
+DEF SAMPLE_RATE = ((4194304*256)/CLK_PER_SA)*256
+DEF RASTER_COUNT = (CLK_PER_SA*32)/456
+DEF CHN3_COUNT = 2048-(CLK_PER_SA/2)
 
 
         SECTION "hram", HRAM
@@ -59,6 +67,9 @@ DEF HBlankSCY           EQUS "(HBlank+HBlankSCYOffset)"
 DEF CompressedFlag      EQUS "(HBlank+HBlankCompressedFlagOffset)"
 DEF HBlankSelfmodJump   EQUS "(HBlank+HBlankSelfmodJumpOffset)"
 DEF DeltaPacketCount    EQUS "(HBlank+HBlankDeltaPacketCountOffset)"
+DEF AudioProcAddr       EQUS "(HBlank+HBlankAudioProcAddrOffset)"
+DEF AudioBankLow        EQUS "(HBlank+HBlankAudioBankLowOffset)"
+DEF AudioBankHigh       EQUS "(HBlank+HBlankAudioBankHighOffset)"
 
         SECTION "stack", WRAM0[$CF00]
         
@@ -163,6 +174,11 @@ Initialize:
         ld bc,HBT_end - HBlankTemplate    ; Copy the HBlank procedure in HRAM
         call Copy                         ; as it is self-modifying
         
+        ld de,AudioEngine
+        ld hl,AudioEngineTemplate
+        ld bc,AET_end - AudioEngineTemplate
+        call Copy
+        
         ld a,$FF
         ld bc,16
         ld hl,$8BF0
@@ -218,6 +234,27 @@ Initialize:
         ld a,4                          ; Initialize the frame down-counter
         ldh [Cycle],a                   ; (counts for next metaframe)
         
+        ; Reset the APU
+        xor a
+        ldh [$26], a
+        ld a, $80
+        ldh [$26], a
+        xor a
+        ldh [$12], a
+        ldh [$17], a
+        ldh [$1A], a
+        ldh [$21], a
+        ld a, $FF
+        ldh [$25], a
+        ld a,$77
+        ldh [$24],a
+        ld a,%0010_0000
+        ldh [$1C],a
+        ld a,LOW(CHN3_COUNT + $8000)
+        ldh [$1D],a
+        ;ld a,HIGH(CHN3_COUNT + $8000)
+        ;ldh [$1E],a
+        
         ld a,$FF
         ldh [$47],a             ; All black palette
       
@@ -238,6 +275,16 @@ Initialize:
         ldh [$42],a             ; Scroll up a bit for creating the bars
         xor a                   ; Clear the interrupt flag (no spurious
         ldh [$0F],a             ; interrupts please)
+        
+        ld hl,CurSrcAddr
+        ld a,[hl+]
+        ld d,[hl]
+        ld e,a
+        ld hl,CurDestAddr
+        ld a,[hl+]
+        ld h,[hl]
+        ld l,a
+        ld bc,$4000
         
         ei                      ; Interrupts on!
 
@@ -262,10 +309,19 @@ NextBank:
         
         
         
-VBlank: push af
+VBlank: ;push af
         push bc
-        push de
-        push hl
+        ;push de
+        ;push hl
+        
+        ld a,l
+        ldh [CurDestAddr],a
+        ld a,h
+        ldh [CurDestAddr+1],a
+        ld hl,CurSrcAddr
+        ld a,e
+        ld [hl+],a
+        ld [hl],d
         
         ldh a,[CurVideoBankLow]
         ld [$2222],a
@@ -372,12 +428,7 @@ VBlank: push af
         ld a,e
         ld [hl+],a
         ld [hl],d
-        
-        pop hl
-        pop de
-        pop bc
-        pop af
-        reti
+        jp .vblank_exit
         
         
         ; Reset the addresses for the next 4 frame upload cycle
@@ -431,11 +482,7 @@ VBlank: push af
         ld a,4
         ldh [Cycle],a
         
-        pop hl
-        pop de
-        pop bc
-        pop af
-        reti
+        jp .vblank_exit
         
 .end_video:
         xor a
@@ -447,11 +494,7 @@ VBlank: push af
         ldh [CompressedFlag], a     ; is idle
         ldh [CompressedFlagSaved], a
         
-        pop hl
-        pop de
-        pop bc
-        pop af
-        reti
+        jp .vblank_exit
         
         
 .vbl_compression:
@@ -574,11 +617,7 @@ VBlank: push af
         ld [hl+],a
         ld [hl],d        
         
-        pop hl
-        pop de
-        pop bc
-        pop af
-        reti
+        jp .vblank_exit
         
         
 .video_ended:
@@ -589,11 +628,7 @@ VBlank: push af
         ld a,$18
         ldh [HBlankSelfmodJump],a
         
-        pop hl
-        pop de
-        pop bc
-        pop af
-        reti
+        jp .vblank_exit
         
         
 .freeze_frame:
@@ -608,20 +643,36 @@ VBlank: push af
         ld a,$18
         ldh [HBlankSelfmodJump],a
         
-        pop hl
-        pop de
+.vblank_exit:
+        ld a,LOW(AudioFrameLine0)
+        ldh [AudioProcAddr],a
+        ld a,HIGH(AudioFrameLine0)
+        ldh [AudioProcAddr+1],a
+
+        ld hl,CurSrcAddr
+        ld a,[hl+]
+        ld d,[hl]
+        ld e,a
+        ld hl,CurDestAddr
+        ld a,[hl+]
+        ld h,[hl]
+        ld l,a
+        ;pop hl
+        ;pop de
         pop bc
-        pop af
+        ;pop af
         reti
         
-
+        
+        
+        SECTION "video_engine_template", ROM0
 
 HBlankTemplate:
 HBT_compressed:
         ldh a,[$44]         ; Use LY to count the packets already done
 HBT_counter:                ; CompressionPacketCount - 1
         cp 255
-        jr nc,HBT_nothing
+        jr nc,HBT_endj
         
         ld a,[de]
         inc e
@@ -650,35 +701,37 @@ HBT_counter:                ; CompressionPacketCount - 1
         inc de
         
 HBT_commend:
-        ld a,l
-        ldh [CurDestAddr],a
-        ld a,h
-        ldh [CurDestAddr+1],a
-        ld hl,CurSrcAddr
-        ld a,e
-        ld [hl+],a
-        ld [hl],d
+        ;ld a,l
+        ;ldh [CurDestAddr],a
+        ;ld a,h
+        ;ldh [CurDestAddr+1],a
         
 HBT_endj:                 ; HBlankSelfmodJump
         jr HBT_end_noscroll           ; This offset must be $18
-        ld l,HBlankSCY & $FF          ; A == $18!
-        dec [hl]
-        ld l,HBlankSelfmodJump & $FF
-        ld [hl],a                     
-        reti
+        ldh [HBlankSelfmodJump],a     ; A == $18!
+        ldh a,[HBlankSCY]
+        dec a
+        ldh [HBlankSCY],a
+HBT_exit:
+HBT_AudioBankLow:
+        ld a,LOW(NUM_VIDEO_BANKS+1)
+        ld [$2222],a
+        IF DEF(MBC3) == 0
+HBT_AudioBankHigh:
+        ld a,HIGH(NUM_VIDEO_BANKS+1)
+        ld [$3333],a
+        ENDC
+HBT_AudioProcAddr:
+        jp AudioFrameLine0
         
-        REPT 13                   ; Add some padding to make sure that the
+        REPT 9                    ; Add some padding to make sure that the
         nop                       ; jump at HBT_endj has $18 as argument so that
         ENDR                      ; it becomes a ld a,$18 if it's not taken
-        
-HBT_nothing:
-        ld h,$FF
-        jr HBT_endj
         
 HBT_end_noscroll:
         ld a,$3E
         ldh [HBlankSelfmodJump],a
-        reti
+        jr HBT_exit
         
 HBT_Entry:
 HBT_VideoBankLow:
@@ -690,10 +743,10 @@ HBT_VideoBankHigh:
         ld [$3333],a
         ENDC
         
-HBT_csrc:                 ; CurSrcAddr - 1
-        ld de,60000
-HBT_cdest:                ; CurDestAddr - 1
-        ld hl,60000
+;HBT_csrc:                 ; CurSrcAddr - 1
+        ;ld de,60000
+;HBT_cdest:                ; CurDestAddr - 1
+;        ld hl,60000
         
 HBT_scy:                  ; HBlankSCY - 1
         ld a,SCY_OFFSET-1
@@ -721,6 +774,10 @@ HBT_notcompr:
         inc de
         
         jr HBT_commend
+HBT_csrc:                 ; CurSrcAddr - 1
+        ld de,60000
+HBT_cdest:                ; CurDestAddr - 1
+        ld hl,60000
 HBT_end:
         
         
@@ -736,11 +793,196 @@ HBlankSCYOffset                     EQU HBT_scy - HBlankTemplate + 1
 HBlankCompressedFlagOffset          EQU HBT_cjmp - HBlankTemplate
 HBlankSelfmodJumpOffset             EQU HBT_endj - HBlankTemplate
 HBlankDeltaPacketCountOffset        EQU HBT_counter - HBlankTemplate + 1
+HBlankAudioProcAddrOffset           EQU HBT_AudioProcAddr - HBlankTemplate + 1
+HBlankAudioBankLowOffset            EQU HBT_AudioBankLow - HBlankTemplate + 1
+IF DEF(MBC3) == 0
+HBlankAudioBankHighOffset           EQU HBT_AudioBankHigh - HBlankTemplate + 1
+ENDC
 
 
-        SECTION "hblank_copier", HRAM[$FFFE-RealHBlankProcSize]
+        SECTION "video_engine", HRAM[$FFFE-RealHBlankProcSize]
     
 HBlank:                 DS RealHBlankProcSize
+
+        
+        SECTION "audio_engine_template", ROM0
+        
+DEF AudioFrameLine9 EQUS "(AudioEngine+AudioEngine1Offset)"
+DEF AudioFrameLine10 EQUS "(AudioEngine+AudioEngine2Offset)"
+DEF AudioFrameLine11 EQUS "(AudioEngine+AudioEngine3Offset)"
+        
+AudioEngineTemplate:
+AET_1:
+        xor a
+        ldh [$1A],a
+AET_CopyStart1:
+        DEF _I = 0
+        REPT 6
+        ld a,$00           ; 2
+        ldh [$FF30+_I], a  ; 3
+        DEF _I = _I + 1
+        ENDR
+        ld a,LOW(AudioFrameLine10)
+        ldh [AudioProcAddr],a
+        reti
+        
+AET_2:
+AET_CopyStart2:
+        REPT 6
+        ld a,$00           ; 2
+        ldh [$FF30+_I], a  ; 3
+        DEF _I = _I + 1
+        ENDR
+        ld a,LOW(AudioFrameLine11)
+        ldh [AudioProcAddr],a
+        reti
+        ; 64 cpu clocks per copy
+        
+AET_3:
+AET_CopyStart3:
+        REPT 4
+        ld a,$00           ; 2
+        ldh [$FF30+_I], a  ; 3
+        DEF _I = _I + 1
+        ENDR
+        ld a,$FF
+        ldh [$1A],a
+        ld a,HIGH(CHN3_COUNT + $8000)
+        ldh [$1E],a
+        ld a,LOW(AudioFrameLine12)
+        ldh [AudioProcAddr],a
+        ld a,HIGH(AudioFrameLine12)
+        ldh [AudioProcAddr+1],a
+        reti
+AET_end:
+
+RealAudioEngineProcSize           EQU AET_end - AudioEngineTemplate
+AudioEngine1Offset                EQU AET_1 - AudioEngineTemplate
+AudioEngine2Offset                EQU AET_2 - AudioEngineTemplate
+AudioEngine3Offset                EQU AET_3 - AudioEngineTemplate
+AudioEngineCopyStart1Offset       EQU AET_CopyStart1 - AudioEngineTemplate
+AudioEngineCopyStart2Offset       EQU AET_CopyStart2 - AudioEngineTemplate
+AudioEngineCopyStart3Offset       EQU AET_CopyStart3 - AudioEngineTemplate
+        
+        SECTION "audio_engine", WRAM0
+        
+AudioEngine:                      DS RealAudioEngineProcSize
+        
+
+        SECTION "audio_frame_handlers", ROM0[$1000]
+       
+AudioFrameLine0:
+        DEF _I = 0
+        REPT 3
+        ld a,[bc]
+        ld [AudioEngine+AudioEngineCopyStart1Offset+1+4*_I],a
+        inc c
+        DEF _I = _I + 1
+        ld a,[bc]
+        ld [AudioEngine+AudioEngineCopyStart1Offset+1+4*_I],a
+        inc c
+        DEF _I = _I + 1
+        ld a,LOW(.next\@)
+        ldh [AudioProcAddr],a
+        reti
+.next\@:
+        ENDR
+        
+AudioFrameLine3:
+        DEF _I = 0
+        REPT 3
+        ld a,[bc]
+        ld [AudioEngine+AudioEngineCopyStart2Offset+1+4*_I],a
+        inc c
+        DEF _I = _I + 1
+        ld a,[bc]
+        ld [AudioEngine+AudioEngineCopyStart2Offset+1+4*_I],a
+        inc c
+        DEF _I = _I + 1
+        ld a,LOW(.next\@)
+        ldh [AudioProcAddr],a
+        reti
+.next\@:
+        ENDR
+        
+AudioFrameLine6:
+        DEF _I = 0
+        ld a,[bc]
+        ld [AudioEngine+AudioEngineCopyStart3Offset+1+4*_I],a
+        inc c
+        DEF _I = _I + 1
+        ld a,[bc]
+        ld [AudioEngine+AudioEngineCopyStart3Offset+1+4*_I],a
+        inc c
+        DEF _I = _I + 1
+        ld a,LOW(AudioFrameLine7)
+        ldh [AudioProcAddr],a
+        reti
+        
+AudioFrameLine7:
+        ld a,[bc]
+        ld [AudioEngine+AudioEngineCopyStart3Offset+1+4*_I],a
+        inc c
+        DEF _I = _I + 1
+        ld a,[bc]
+        ld [AudioEngine+AudioEngineCopyStart3Offset+1+4*_I],a
+        inc bc
+        bit 7,b
+        jr z,.nobankchg
+        ld b,$40
+        ldh a,[AudioBankLow]
+        inc a
+        ldh [AudioBankLow],a
+        IF DEF(MBC3) == 0
+        jr nz,.nobankchg
+        ldh a,[AudioBankHigh]
+        inc a
+        ldh [AudioBankHigh]
+        ENDC
+.nobankchg:
+        ld a,LOW(.next)
+        ldh [AudioProcAddr],a
+        reti
+.next
+        
+AudioFrameLine8:
+        ld a,LOW(AudioFrameLine9)
+        ldh [AudioProcAddr],a
+        ld a,HIGH(AudioFrameLine9)
+        ldh [AudioProcAddr+1],a
+        reti
+
+AudioFrameLine12:
+        REPT 21-12
+        ld a,LOW(.next\@)
+        ldh [AudioProcAddr],a
+        reti
+.next\@:
+        ENDR
+        
+;AudioFrameLine18:
+;        ld a,LOW(AudioFrameLine19)
+;        ldh [AudioProcAddr],a
+;        reti
+;        
+;AudioFrameLine18:
+;        ld a,LOW(AudioFrameLine19)
+;        ldh [AudioProcAddr],a
+;        ld a,HIGH(AudioFrameLine19)
+;        ldh [AudioProcAddr+1],a
+;        reti
+;        
+;AudioFrameLine20:
+;        ld a,LOW(AudioFrameLine21)
+;        ldh [AudioProcAddr],a
+;        jp AudioEngine1
+;        
+AudioFrameLine21:
+        ;ld a,LOW(AudioFrameLine0)
+        xor a
+        ldh [AudioProcAddr],a
+        reti
+        ;reti
 
       
         SECTION "data", ROM0[$4000]

@@ -235,6 +235,7 @@ def encode(opts, inputimgs, outputfn):
     c = len(bank) - 1   # do not count the final padding block
     for block, i in zip(bank, itertools.count()):
       fpo.write(block(i, c))
+  return len(banks)
       
     
 def scanFiles(fnpattern):
@@ -308,6 +309,8 @@ def main():
   parser.add_argument("-c", "--timebase", dest="timebase", type=float,
                       default=1.0, help="the relative speed of the output " +
                       "(> 1 skips frames, < 1 duplicates frames)")
+  parser.add_argument('-d', '--include', dest='include', default=None,
+                      help='write number of banks to FILE', metavar='FILE')
   opts = parser.parse_args()
   
   VERBOSE = opts.verbose
@@ -327,7 +330,10 @@ def main():
   vprint('Reading images...')
   encimages = readImages(opts, allfiles)
   
-  encode(opts, encimages, opts.outputfn)
+  n_banks = encode(opts, encimages, opts.outputfn)
+  if opts.include:
+    with open(opts.include, "w") as f:
+      f.write('DEF NUM_VIDEO_BANKS = ' + str(n_banks) + '\n')
   
 
 if __name__ == "__main__":
