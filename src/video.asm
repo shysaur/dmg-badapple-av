@@ -2,7 +2,8 @@
 
         INCLUDE "video.inc"
         INCLUDE "utils.inc"
-        
+        INCLUDE "obj/frames.inc"
+                
         
 IF DEF(CONFIG) == 0
 CONFIG EQU 0
@@ -39,15 +40,25 @@ F_COMPRESSED                EQU $18
 F_NOT_COMPRESSED            EQU $3E
 
 
-        SECTION "main_var", HRAM
+        SECTION "hram", HRAM
         
 Cycle:                        DS 1
-CurBank:                      DS 2
 FrameFlag:                    DS 1
 BankswitchPending:            DS 1      ; compressed metaframes only
 PulldownCounter:              DS 1
 CompressedFlagSaved:          DS 1
 
+DEF HBlankEntry         EQUS "(HBlank+HBlankEntryOffset)"
+DEF CurVideoBankLow     EQUS "(HBlank+HBlankCurVideoBankLowOffset)"
+IF DEF(MBC3) == 0
+DEF CurVideoBankHigh    EQUS "(HBlank+HBlankCurVideoBankHighOffset)"
+ENDC
+DEF CurSrcAddr          EQUS "(HBlank+HBlankCurSrcAddressOffset)"
+DEF CurDestAddr         EQUS "(HBlank+HBlankCurDestAddressOffset)"
+DEF HBlankSCY           EQUS "(HBlank+HBlankSCYOffset)"
+DEF CompressedFlag      EQUS "(HBlank+HBlankCompressedFlagOffset)"
+DEF HBlankSelfmodJump   EQUS "(HBlank+HBlankSelfmodJumpOffset)"
+DEF DeltaPacketCount    EQUS "(HBlank+HBlankDeltaPacketCountOffset)"
 
         SECTION "stack", WRAM0[$CF00]
         
@@ -64,7 +75,7 @@ VBlankInt:
         SECTION "ih_lcdc",ROM0[$48]
         
 LCDCInt:     
-        jp HBlank   
+        jr HBlankEntry   
         
         
         SECTION "ih_timer",ROM0[$50]
@@ -196,11 +207,11 @@ Initialize:
         ldh [CurDestAddr+1],a           ; Initialize the dest address
         
         ld a,1
-        ldh [CurBank],a
+        ldh [CurVideoBankLow],a
         ld [$2222],a
-        xor a
-        ldh [CurBank+1],a               ; Initialize the bank counters & sync
         IF DEF(MBC3) == 0
+        xor a
+        ldh [CurVideoBankHigh],a        ; Initialize the bank counters & sync
         ld [$3333],a                    ; them with the MBC
         ENDC
         
@@ -230,27 +241,21 @@ Initialize:
         
         ei                      ; Interrupts on!
 
-.l2:    ld hl,FrameFlag
-        xor a
-.l:     halt
-        cp [hl]
-        jr z,.l                 ; Wait for next VBlank
-        ld [hl],a
+.l2:    halt
         jr .l2
         
         
         
 NextBank:
-        ld hl,CurBank
-        ld a,[hl]
+        ldh a,[CurVideoBankLow]
         inc a
-        ld [hl+],a
+        ldh [CurVideoBankLow],a
         ld [$2222],a
         IF DEF(MBC3) == 0
         ret nz
-        ld a,[hl]
+        ldh a,[CurVideoBankHigh]
         inc a
-        ld [hl],a
+        ldh [CurVideoBankHigh],a
         ld [$3333],a
         ENDC
         ret
@@ -261,6 +266,13 @@ VBlank: push af
         push bc
         push de
         push hl
+        
+        ldh a,[CurVideoBankLow]
+        ld [$2222],a
+        IF DEF(MBC3) == 0
+        ldh a,[CurVideoBankHigh]
+        ld [$3333],a
+        ENDC
         
         ld a,1                      ; Tell the main thread that a frame
         ldh [FrameFlag],a           ; has passed
@@ -603,78 +615,8 @@ VBlank: push af
         reti
         
 
-HBlankTemplate:
-        push af
-        push de
-        push hl
-        
-HBT_csrc:                 ; CurSrcAddr - 1
-        ld de,60000
-HBT_cdest:                ; CurDestAddr - 1
-        ld hl,60000
-        
-HBT_scy:                  ; HBlankSCY - 1
-        ld a,SCY_OFFSET-1
-        ldh [$42],a
-        
-HBT_cjmp:                 ; CompressedFlag
-        jr HBT_compressed
 
-HBT_notcompr: 
-        IF BYTES_PER_HLINE == 4
-        REPT 3
-        ld a,[de]
-        ld [hl+],a
-        inc e
-        ENDR
-        ELSE
-        REPT 2
-        ld a,[de]
-        ld [hl+],a
-        inc de
-        ENDR
-        ENDC
-        ld a,[de]
-        ld [hl+],a
-        inc de
-        
-HBT_commend:
-        ld a,l
-        ldh [CurDestAddr],a
-        ld a,h
-        ldh [CurDestAddr+1],a
-        ld hl,CurSrcAddr
-        ld a,e
-        ld [hl+],a
-        ld [hl],d
-        
-HBT_endj:                 ; HBlankSelfmodJump
-        jr HBT_end_noscroll
-        ld l,HBlankSCY & $FF          ; A == $18!
-        dec [hl]
-        ld l,HBlankSelfmodJump & $FF
-        ld [hl],a                     
-        pop hl
-        pop de
-        pop af
-        reti
-        
-        REPT 10                   ; Add some padding to make sure that the
-        nop                       ; jump at HBT_endj has $18 as argument so that
-        ENDR                      ; it becomes a ld a,$18 if it's not taken
-        
-HBT_nothing:
-        ld h,$FF
-        jr HBT_endj
-        
-HBT_end_noscroll:
-        ld a,$3E
-        ldh [HBlankSelfmodJump],a
-        pop hl
-        pop de
-        pop af
-        reti
-        
+HBlankTemplate:
 HBT_compressed:
         ldh a,[$44]         ; Use LY to count the packets already done
 HBT_counter:                ; CompressionPacketCount - 1
@@ -707,11 +649,87 @@ HBT_counter:                ; CompressionPacketCount - 1
         ld [hl+],a
         inc de
         
+HBT_commend:
+        ld a,l
+        ldh [CurDestAddr],a
+        ld a,h
+        ldh [CurDestAddr+1],a
+        ld hl,CurSrcAddr
+        ld a,e
+        ld [hl+],a
+        ld [hl],d
+        
+HBT_endj:                 ; HBlankSelfmodJump
+        jr HBT_end_noscroll           ; This offset must be $18
+        ld l,HBlankSCY & $FF          ; A == $18!
+        dec [hl]
+        ld l,HBlankSelfmodJump & $FF
+        ld [hl],a                     
+        reti
+        
+        REPT 13                   ; Add some padding to make sure that the
+        nop                       ; jump at HBT_endj has $18 as argument so that
+        ENDR                      ; it becomes a ld a,$18 if it's not taken
+        
+HBT_nothing:
+        ld h,$FF
+        jr HBT_endj
+        
+HBT_end_noscroll:
+        ld a,$3E
+        ldh [HBlankSelfmodJump],a
+        reti
+        
+HBT_Entry:
+HBT_VideoBankLow:
+        ld a,$00
+        ld [$2222],a
+        IF DEF(MBC3) == 0
+HBT_VideoBankHigh:
+        ld a,$00
+        ld [$3333],a
+        ENDC
+        
+HBT_csrc:                 ; CurSrcAddr - 1
+        ld de,60000
+HBT_cdest:                ; CurDestAddr - 1
+        ld hl,60000
+        
+HBT_scy:                  ; HBlankSCY - 1
+        ld a,SCY_OFFSET-1
+        ldh [$42],a
+        
+HBT_cjmp:                 ; CompressedFlag
+        jr HBT_compressed
+
+HBT_notcompr: 
+        IF BYTES_PER_HLINE == 4
+        REPT 3
+        ld a,[de]
+        ld [hl+],a
+        inc e
+        ENDR
+        ELSE
+        REPT 2
+        ld a,[de]
+        ld [hl+],a
+        inc de
+        ENDR
+        ENDC
+        ld a,[de]
+        ld [hl+],a
+        inc de
+        
         jr HBT_commend
 HBT_end:
         
         
 RealHBlankProcSize                  EQU HBT_end - HBlankTemplate
+HBlankEntryOffset                   EQU HBT_Entry - HBlankTemplate
+HBlankCurVideoBankLowOffset         EQU HBT_VideoBankLow - HBlankTemplate + 1
+IF DEF(MBC3) == 0
+HBlankCurVideoBankHighOffset        EQU HBT_VideoBankHigh - HBlankTemplate + 1
+ENDC
 HBlankCurSrcAddressOffset           EQU HBT_csrc - HBlankTemplate + 1
 HBlankCurDestAddressOffset          EQU HBT_cdest - HBlankTemplate + 1
 HBlankSCYOffset                     EQU HBT_scy - HBlankTemplate + 1
@@ -720,27 +738,12 @@ HBlankSelfmodJumpOffset             EQU HBT_endj - HBlankTemplate
 HBlankDeltaPacketCountOffset        EQU HBT_counter - HBlankTemplate + 1
 
 
-        SECTION "hblank_copier", HRAM
+        SECTION "hblank_copier", HRAM[$FFFE-RealHBlankProcSize]
     
-HBlank:             DS HBlankCurSrcAddressOffset
-CurSrcAddr:         DS 2
-                    DS HBlankCurDestAddressOffset - HBlankCurSrcAddressOffset - 2
-CurDestAddr:        DS 2
-                    DS HBlankSCYOffset - HBlankCurDestAddressOffset - 2
-HBlankSCY:          DS 1
-                    DS HBlankCompressedFlagOffset - HBlankSCYOffset - 1
-CompressedFlag:     DS 1
-                    DS HBlankSelfmodJumpOffset - HBlankCompressedFlagOffset - 1
-HBlankSelfmodJump:  DS 1
-                    DS HBlankDeltaPacketCountOffset - HBlankSelfmodJumpOffset - 1
-DeltaPacketCount:   DS 1
-                    DS RealHBlankProcSize - HBlankDeltaPacketCountOffset
-      
-      
+HBlank:                 DS RealHBlankProcSize
+
       
         SECTION "data", ROM0[$4000]
-        
-        
         
 Frame:  DB 0
         
