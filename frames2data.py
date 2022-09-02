@@ -41,6 +41,7 @@ def prepareImage(opts, filename):
     image = tmp
   
   image = image.resize((opts.width, opts.height//2), Image.BILINEAR)
+  image = image.point(lambda p: 255 if p > 180 else 0)
   return ImageOps.invert(image).convert("1", None, Image.NONE)
 
 
