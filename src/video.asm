@@ -19,7 +19,7 @@ PULLDOWN_SKIPF EQU (((1.0 - DIV(1.0, PULLDOWN)) + 128) >> 8) & $FF
 HSIZE EQU 20
 IF CONFIG == 0
 VSIZE EQU 9
-BYTES_PER_HLINE EQU 4
+BYTES_PER_HLINE EQU 5
 ENDC
 IF CONFIG == 1
 VSIZE EQU 8
@@ -30,7 +30,7 @@ VSIZE EQU 7
 BYTES_PER_HLINE EQU 4
 ENDC
 
-PACKETS_PER_VBLK EQU 9
+PACKETS_PER_VBLK EQU 36
 
 DEF BYTES_PER_VBLANK = ((HSIZE * VSIZE) * 16 / 4) - (144 * BYTES_PER_HLINE)
 IF BYTES_PER_VBLANK < 0
@@ -86,17 +86,12 @@ Stack:
         SECTION "ih_vbl",ROM0[$40]
         
 VBlankInt:
-        ei
-        ld a,TIMER_COUNTER_INIT
-        ldh [$05],a
         jp VBlank
 
         
         SECTION "ih_lcdc",ROM0[$48]
         
 LCDCInt:     
-        ld a,1
-        ldh [$05],a
         jr HBlankEntry   
         
         
@@ -154,7 +149,6 @@ Header:
         
 Initialize:  
         di
-        ld sp,$FFFE
         
         ld hl,$C000        ;   Clear RAM and WRAM
         xor a              ;Clear from C000 with 00
@@ -253,13 +247,6 @@ Initialize:
         ; Put all channels on both left and right
         ldh [$25], a
         
-        ld a,1
-        ldh [$05],a
-        ld a,TIMER_COUNTER_INIT
-        ldh [$06],a
-        ld a,%0000_0101
-        ldh [$07],a
-        
         ld a,$FF
         ldh [$47],a             ; All black palette
       
@@ -269,6 +256,12 @@ Initialize:
 .wfvbl: ldh a,[$44]
         cp $95                  ; Wait one full frame because the first frame
         jr nz,.wfvbl            ; may skip one HBlank interrupt
+        
+        ld a,1
+        ldh [$05],a
+        ldh [$06],a
+        ld a,%0000_0101
+        ldh [$07],a             ; Enable timer but with a long period
         
         ld a,$CC
         ldh [$47],a             ; Initialize palette
@@ -293,8 +286,7 @@ Initialize:
         
         ei                      ; Interrupts on!
 
-.l2:    halt
-        jr .l2
+.l2:    jr .l2
         
         ld a,e
         or d
@@ -325,6 +317,11 @@ VBlank: ;push af
         ;push bc
         ;push de
         ;push hl
+        
+        ld a,TIMER_COUNTER_INIT
+        ldh [$05],a
+        ldh [$06],a
+        ei
         
         ld a,l
         ldh [CurDestAddr],a
@@ -504,8 +501,6 @@ VBlank: ;push af
         ldh [CompressedFlag], a     ; is idle
         ldh [CompressedFlagSaved], a
         
-        ld bc,Silence               ; Set sound playback address to a zeroed area
-        
         jp .vblank_exit
         
         
@@ -643,6 +638,8 @@ VBlank: ;push af
         ld a,$18
         ldh [HBlankSelfmodJump],a
         
+        ld bc,Silence               ; Set sound playback address to a zeroed area
+        
         jp .vblank_exit
         
         
@@ -659,6 +656,15 @@ VBlank: ;push af
         ldh [HBlankSelfmodJump],a
         
 .vblank_exit:
+        ld hl,$FF44
+        xor a
+.ly_zero_wait:
+        cp [hl]
+        jr nz,.ly_zero_wait
+        inc a
+        ldh [$06],a                 ;Disable the frickin' timer!!
+        ldh [$05],a
+
         ld hl,CurSrcAddr
         ld a,[hl+]
         ld d,[hl]
@@ -671,7 +677,7 @@ VBlank: ;push af
         ;pop de
         ;pop bc
         ;pop af
-        reti
+        jp TimerEntry
         
         
         
@@ -718,6 +724,7 @@ HBT_commend:
         
 HBT_endj:                 ; HBlankSelfmodJump
         jr HBT_end_noscroll           ; This offset must be $18
+        ldh [$05],a
         ldh [HBlankSelfmodJump],a     ; A == $18!
         ldh a,[HBlankSCY]
         dec a
@@ -737,11 +744,11 @@ HBT_AudioProcAddr:
         jp AudioFrame
         
         IF DEF(MBC3) == 0
-        REPT 3                    ; Add some padding to make sure that the
+        REPT 1                    ; Add some padding to make sure that the
         nop                       ; jump at HBT_endj has $18 as argument so that
         ENDR                      ; it becomes a ld a,$18 if it's not taken
         ELSE
-        REPT 8                    ; Add some padding to make sure that the
+        REPT 6                    ; Add some padding to make sure that the
         nop                       ; jump at HBT_endj has $18 as argument so that
         ENDR                      ; it becomes a ld a,$18 if it's not taken
         ENDC
@@ -778,22 +785,28 @@ HBT_cjmp:                 ; CompressedFlag
         jr HBT_compressed
 
 HBT_notcompr: 
-        IF BYTES_PER_HLINE == 4
+        IF BYTES_PER_HLINE == 5
+        REPT 5
+        ld a,[de]
+        ld [hl+],a
+        inc de
+        ENDR
+        ELIF BYTES_PER_HLINE == 4
         REPT 3
         ld a,[de]
         ld [hl+],a
         inc e
         ENDR
+        ld a,[de]
+        ld [hl+],a
+        inc de
         ELSE
-        REPT 2
+        REPT 3
         ld a,[de]
         ld [hl+],a
         inc de
         ENDR
         ENDC
-        ld a,[de]
-        ld [hl+],a
-        inc de
         
         jr HBT_commend
 HBT_csrc:                 ; CurSrcAddr - 1

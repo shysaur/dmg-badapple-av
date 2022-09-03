@@ -15,8 +15,8 @@ HEIGHT = 144
 HBLK_BYTES = 576
 VBLK_BYTES = 144
 
-HBLK_PACKETS = 144
-VBLK_PACKETS = 9
+HBLK_PACKETS = [144] * 4
+VBLK_PACKETS = [16, 16, 16, 8]
 
 
 def vprint(*args, **kwargs):
@@ -128,7 +128,7 @@ def generateBlocksForMetaframe(opts, oldf, nextf):
   
   if oldf:
     diff = diffFrames(oldf, nextf)
-    if len(diff) + 8*4 >= (opts.hblkbytes + opts.vblkbytes) * 4:
+    if len(diff) + 8*4 >= (opts.hblkbytes + opts.vblkbytes) * 4 or len(diff)//4 > sum(HBLK_PACKETS+VBLK_PACKETS):
       compress = False
       data = nextf
     else:
@@ -141,24 +141,22 @@ def generateBlocksForMetaframe(opts, oldf, nextf):
   if compress:    # compressed frame
     # redistribute the dead time across the entirety of the frame
     npackets = len(data)//4
-    margin = (HBLK_PACKETS + VBLK_PACKETS) * 4 - npackets
-    hblmargin = int(margin * HBLK_PACKETS / (HBLK_PACKETS + VBLK_PACKETS))
-    vblmargin = margin - hblmargin
-    hblmargin /= 4
-    vblmargin /= 4
+    hblpackets = min(npackets, sum(HBLK_PACKETS))
+    vblpackets = npackets - hblpackets
     
-    vblpackets, vblme, hblpackets, hblme = 0, 0, 0, 0
+    vble, hble, chk_numpackets = 0, 0, 0
     blocksizes = []
-    for k in range(4):
-      a = HBLK_PACKETS - int(hblmargin+hblme)
-      b = VBLK_PACKETS - int(vblmargin+vblme)
-      vblpackets += a
-      hblpackets += b
+    for k, hbllimit, vbllimit in zip(range(4), HBLK_PACKETS, VBLK_PACKETS):
+      hbl = hblpackets * hbllimit / sum(HBLK_PACKETS)
+      vbl = vblpackets * vbllimit / sum(VBLK_PACKETS)
+      a = int(hbl + hble + 0.00001)
+      b = int(vbl + vble + 0.00001)
       blocksizes += [a*4, b*4]
-      vblme = (vblme + vblmargin) % 1
-      hblme = (hblme + hblmargin) % 1
+      hble = (hbl + hble) % 1
+      vble = (vbl + vble) % 1
+      chk_numpackets += a + b
     
-    assert vblpackets + hblpackets == npackets
+    assert chk_numpackets == npackets
     
     prev_slice_end = 0
     for cur_slice_len, i in zip(blocksizes, itertools.count()):
@@ -326,7 +324,7 @@ def main():
   hsize = 20
   if opts.config == '0':
     vsize = 9
-    bytesPerHline = 4
+    bytesPerHline = 5
   elif opts.config == '1':
     vsize = 8
     bytesPerHline = 4
