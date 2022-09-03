@@ -16,7 +16,7 @@ HBLK_BYTES = 576
 VBLK_BYTES = 144
 
 HBLK_PACKETS = 144
-VBLK_PACKETS = 36
+VBLK_PACKETS = 9
 
 
 def vprint(*args, **kwargs):
@@ -173,9 +173,12 @@ def generateBlocksForMetaframe(opts, oldf, nextf):
   else:     # literal frame
     prev_slice_end = 0
     for cur_slice_len in [opts.hblkbytes, opts.vblkbytes] * 4:
-      body = data[prev_slice_end : prev_slice_end+cur_slice_len]
+      body = data[prev_slice_end:]
+      if len(body) < cur_slice_len:
+        body += bytes([0] * (cur_slice_len - len(body)))
+      else:
+        body = body[0:cur_slice_len]
       res.append(LiteralBlock(body, prev_slice_end == 0))
-      
       prev_slice_end += cur_slice_len
   
   return res
@@ -235,6 +238,7 @@ def encode(opts, inputimgs, outputfn):
     c = len(bank) - 1   # do not count the final padding block
     for block, i in zip(bank, itertools.count()):
       fpo.write(block(i, c))
+  return len(banks)
       
     
 def scanFiles(fnpattern):
@@ -298,16 +302,19 @@ def main():
                       choices=['no', 'fit-horizontal', 'fit-vertical', 'auto'],
                       default='auto', help="specifies if and how to scale each " +
                       "frame to make them fit the screen")
-  parser.add_argument("-x", "--width", dest="width", type=int,
-                      default=160, help="the encoded video's width")
-  parser.add_argument("-y", "--height", dest="height", type=int,
-                      default=144, help="the encoded video's height")
-  parser.add_argument("-i", "--vblk-bytes", dest="vblkbytes", type=int,
-                      default=144, help="the amount of video bytes " +
-                      "copied in vblank")
+  #parser.add_argument("-x", "--width", dest="width", type=int,
+  #                    default=160, help="the encoded video's width")
+  #parser.add_argument("-y", "--height", dest="height", type=int,
+  #                    default=144, help="the encoded video's height")
+  #parser.add_argument("-i", "--vblk-bytes", dest="vblkbytes", type=int,
+  #                    default=144, help="the amount of video bytes " +
+  #                    "copied in vblank")
+  parser.add_argument("-k", "--config", dest="config", choices=['0', '1', '2'], default='0', help="configuration")
   parser.add_argument("-c", "--timebase", dest="timebase", type=float,
                       default=1.0, help="the relative speed of the output " +
                       "(> 1 skips frames, < 1 duplicates frames)")
+  parser.add_argument('-d', '--include', dest='include', default=None,
+                      help='write number of banks to FILE', metavar='FILE')
   opts = parser.parse_args()
   
   VERBOSE = opts.verbose
@@ -316,7 +323,26 @@ def main():
   #HEIGHT = options.height
   #VBLK_BYTES = options.vblkbytes
   #HBLK_BYTES = ((WIDTH // 8) * ((HEIGHT // 2) // 8)) * 16 // 4 - VBLK_BYTES
-  opts.hblkbytes = ((opts.width // 8) * ((opts.height // 2) // 8)) * 16 // 4 - opts.vblkbytes
+  hsize = 20
+  if opts.config == '0':
+    vsize = 9
+    bytesPerHline = 4
+  elif opts.config == '1':
+    vsize = 8
+    bytesPerHline = 4
+  else:
+    vsize = 7
+    bytesPerHline = 4
+  opts.width = hsize * 8
+  opts.height = vsize * 16
+  opts.hblkbytes = 144 * bytesPerHline
+  opts.vblkbytes = max(0, ((hsize * vsize) * 16 // 4) - opts.hblkbytes)
+  opts.hblkpadding = max(0, opts.hblkbytes * 4 - (hsize * vsize) * 16)
+  print("width =", opts.width)
+  print("height =", opts.height)
+  print("hblkbytes =", opts.hblkbytes)
+  print("vblkbytes =", opts.vblkbytes)
+  print("hblkpadding =", opts.hblkpadding)
   
   if len(opts.files) == 1:
     allfiles = scanFiles(opts.files[0])
@@ -327,7 +353,10 @@ def main():
   vprint('Reading images...')
   encimages = readImages(opts, allfiles)
   
-  encode(opts, encimages, opts.outputfn)
+  n_banks = encode(opts, encimages, opts.outputfn)
+  if opts.include:
+    with open(opts.include, "w") as f:
+      f.write('DEF NUM_VIDEO_BANKS = ' + str(n_banks) + '\n')
   
 
 if __name__ == "__main__":
