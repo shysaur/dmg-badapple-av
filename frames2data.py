@@ -16,7 +16,7 @@ HBLK_BYTES = 576
 VBLK_BYTES = 144
 
 HBLK_PACKETS = [144] * 4
-VBLK_PACKETS = [16, 16, 16, 8]
+VBLK_PACKETS = [12, 12, 12, 10]
 
 
 def vprint(*args, **kwargs):
@@ -141,21 +141,35 @@ def generateBlocksForMetaframe(opts, oldf, nextf):
   if compress:    # compressed frame
     # redistribute the dead time across the entirety of the frame
     npackets = len(data)//4
-    hblpackets = min(npackets, sum(HBLK_PACKETS))
-    vblpackets = npackets - hblpackets
+    #hblpackets = min(npackets, sum(HBLK_PACKETS))
+    #vblpackets = npackets - hblpackets
+    vblpackets = min(npackets, sum(VBLK_PACKETS))
+    hblpackets = npackets - vblpackets
     
-    vble, hble, chk_numpackets = 0, 0, 0
+    vbl_left, hbl_left, chk_numpackets = vblpackets, hblpackets, 0
     blocksizes = []
-    for k, hbllimit, vbllimit in zip(range(4), HBLK_PACKETS, VBLK_PACKETS):
-      hbl = hblpackets * hbllimit / sum(HBLK_PACKETS)
-      vbl = vblpackets * vbllimit / sum(VBLK_PACKETS)
-      a = int(hbl + hble + 0.00001)
-      b = int(vbl + vble + 0.00001)
-      blocksizes += [a*4, b*4]
-      hble = (hbl + hble) % 1
-      vble = (vbl + vble) % 1
-      chk_numpackets += a + b
+    for hbllimit, vbllimit in zip(HBLK_PACKETS, VBLK_PACKETS):
+      hbl = int(hblpackets * hbllimit / sum(HBLK_PACKETS))
+      vbl = int(vblpackets * vbllimit / sum(VBLK_PACKETS))
+      blocksizes += [hbl*4, vbl*4]
+      hbl_left -= hbl
+      vbl_left -= vbl
+      chk_numpackets += hbl + vbl
+    while hbl_left > 0 or vbl_left > 0:
+      olda, oldb = hbl_left, vbl_left
+      for k, hbllimit, vbllimit in zip(range(4), HBLK_PACKETS, VBLK_PACKETS):
+        prev_hbl, prev_vbl = blocksizes[k*2]//4, blocksizes[k*2+1]//4
+        hbl, vbl = min(1, hbl_left, hbllimit-prev_hbl), min(1, vbl_left, vbllimit-prev_vbl)
+        blocksizes[k*2] += hbl*4
+        blocksizes[k*2+1] += vbl*4
+        hbl_left -= hbl
+        vbl_left -= vbl
+        chk_numpackets += hbl + vbl
+      assert olda > hbl_left or hbl_left == 0
+      assert oldb > vbl_left or vbl_left == 0
     
+    if chk_numpackets != npackets:
+      print("ALLOCATION ERROR", vblpackets, hblpackets, npackets, chk_numpackets, blocksizes)
     assert chk_numpackets == npackets
     
     prev_slice_end = 0
@@ -327,7 +341,7 @@ def main():
     bytesPerHline = 5
   elif opts.config == '1':
     vsize = 8
-    bytesPerHline = 4
+    bytesPerHline = 5
   else:
     vsize = 7
     bytesPerHline = 4

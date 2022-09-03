@@ -23,7 +23,7 @@ BYTES_PER_HLINE EQU 5
 ENDC
 IF CONFIG == 1
 VSIZE EQU 8
-BYTES_PER_HLINE EQU 4
+BYTES_PER_HLINE EQU 5
 ENDC
 IF CONFIG == 2
 VSIZE EQU 7
@@ -865,7 +865,7 @@ AudioFrame:
         
         SECTION "silence", ROM0
         
-Silence: DS 200
+Silence: DS 400 ; double length in case of pulldown-triggered freeze-frame
 
       
         SECTION "data", ROM0[$4000]
