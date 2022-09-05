@@ -14,7 +14,7 @@ SOUND?=sound.wav
 
 include src/Makefile.in
 
-DEPS += $(OBJDIR)/video.inc
+DEPS += $(OBJDIR)/frames.inc $(OBJDIR)/sound.inc
 
 ASM_OBJ=$(patsubst %, $(OBJDIR)/%, $(ASM_SRC:.asm=.o)) $(MUSIC_OBJ)
 	
@@ -27,12 +27,13 @@ $(OBJDIR):
 $(OBJDIR)/%.o: %.asm $(DEPS)
 	$(RGB_AS) $(INC) -o $@ -D CONFIG=$(CONFIG) -D PULLDOWN=$(PULLDOWN) $(ASFLAGS) $<
 
-$(OBJDIR)/video.inc: $(OBJDIR)/frames.bin
+$(OBJDIR)/frames.inc: $(OBJDIR)/frames.bin
 $(OBJDIR)/frames.bin: $(FRAMESDIR)
 	./frames2data.py -o $@ -k $(CONFIG) -p $(FIT) -v $(FRAMESDIR)/%d.$(FRAMEEXT) -c $(PULLDOWN) -d $(OBJDIR)/frames.inc
 
+$(OBJDIR)/sound.inc: $(OBJDIR)/sound.bin
 $(OBJDIR)/sound.bin: $(SOUND)
-	./wav2data.py $< $@
+	./wav2data.py -o $@ -d $(OBJDIR)/sound.inc $<
 
 $(OBJDIR)/code.bin: $(ASM_OBJ) $(DEPS)
 	$(RGB_LINK) -t -o $@ -n $(OUTPUT:.gb=.sym) -m $(OUTPUT:.gb=.map) $(ASM_OBJ)

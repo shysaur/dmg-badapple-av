@@ -3,9 +3,8 @@
         INCLUDE "video.inc"
         INCLUDE "utils.inc"
         INCLUDE "obj/frames.inc"
+        INCLUDE "obj/sound.inc"
                 
-
-; Video defines
 
 IF DEF(CONFIG) == 0
 CONFIG EQU 0
@@ -51,6 +50,17 @@ F_NOT_COMPRESSED            EQU $3E
 
 TIMER_COUNTER_INIT          EQU $100 - (456 / 16)
 
+FIRST_VIDEO_BANK            EQU 1
+LAST_VIDEO_BANK             EQU FIRST_VIDEO_BANK + NUM_VIDEO_BANKS - 1
+FIRST_AUDIO_BANK            EQU LAST_VIDEO_BANK + 1
+LAST_BANK                   EQU FIRST_AUDIO_BANK + NUM_AUDIO_BANKS - 1
+IF LAST_BANK >= $100
+LONG_BANK                   EQU 1
+ENDC
+IF LAST_BANK < $80
+MBC3                        EQU 1
+ENDC
+
 
         SECTION "hram", HRAM
         
@@ -62,7 +72,7 @@ CompressedFlagSaved:          DS 1
 
 DEF HBlankEntry         EQUS "(HBlank+HBlankEntryOffset)"
 DEF CurVideoBankLow     EQUS "(HBlank+HBlankCurVideoBankLowOffset)"
-IF DEF(MBC3) == 0
+IF DEF(LONG_BANK)
 DEF CurVideoBankHigh    EQUS "(HBlank+HBlankCurVideoBankHighOffset)"
 ENDC
 DEF CurSrcAddr          EQUS "(HBlank+HBlankCurSrcAddressOffset)"
@@ -222,12 +232,16 @@ Initialize:
         ld a,$8C
         ldh [CurDestAddr+1],a           ; Initialize the dest address
         
-        ld a,1
+        ld a,LOW(FIRST_VIDEO_BANK)
         ldh [CurVideoBankLow],a
         ld [$2222],a
         IF DEF(MBC3) == 0
+        IF DEF(LONG_BANK)
+        ld a,HIGH(FIRST_VIDEO_BANK)
+        ldh [CurVideoBankHigh],a        
+        ELSE
         xor a
-        ldh [CurVideoBankHigh],a        ; Initialize the bank counters & sync
+        ENDC                            ; Initialize the bank counters & sync
         ld [$3333],a                    ; them with the MBC
         ENDC
         
@@ -302,7 +316,7 @@ NextBank:
         inc a
         ldh [CurVideoBankLow],a
         ld [$2222],a
-        IF DEF(MBC3) == 0
+        IF DEF(LONG_BANK)
         ret nz
         ldh a,[CurVideoBankHigh]
         inc a
@@ -331,13 +345,6 @@ VBlank: ;push af
         ld a,e
         ld [hl+],a
         ld [hl],d
-        
-        ldh a,[CurVideoBankLow]
-        ld [$2222],a
-        IF DEF(MBC3) == 0
-        ldh a,[CurVideoBankHigh]
-        ld [$3333],a
-        ENDC
         
         ld a,1                      ; Tell the main thread that a frame
         ldh [FrameFlag],a           ; has passed
@@ -733,17 +740,17 @@ HBT_exit:
 HBT_TimerEntry:
         push af
 HBT_AudioBankLow:
-        ld a,LOW(NUM_VIDEO_BANKS+1)
+        ld a,LOW(FIRST_AUDIO_BANK)
         ld [$2222],a
-        IF DEF(MBC3) == 0
+        IF DEF(LONG_BANK)
 HBT_AudioBankHigh:
-        ld a,HIGH(NUM_VIDEO_BANKS+1)
+        ld a,HIGH(FIRST_AUDIO_BANK)
         ld [$3333],a
         ENDC
 HBT_AudioProcAddr:
         jp AudioFrame
         
-        IF DEF(MBC3) == 0
+        IF DEF(LONG_BANK)
         REPT 1                    ; Add some padding to make sure that the
         nop                       ; jump at HBT_endj has $18 as argument so that
         ENDR                      ; it becomes a ld a,$18 if it's not taken
@@ -762,7 +769,7 @@ HBT_AudioProcReturn:
 HBT_VideoBankLow:
         ld a,$00
         ld [$2222],a
-        IF DEF(MBC3) == 0
+        IF DEF(LONG_BANK)
 HBT_VideoBankHigh:
         ld a,$00
         ld [$3333],a
@@ -819,7 +826,7 @@ HBT_end:
 RealHBlankProcSize                  EQU HBT_end - HBlankTemplate
 HBlankEntryOffset                   EQU HBT_Entry - HBlankTemplate
 HBlankCurVideoBankLowOffset         EQU HBT_VideoBankLow - HBlankTemplate + 1
-IF DEF(MBC3) == 0
+IF DEF(LONG_BANK)
 HBlankCurVideoBankHighOffset        EQU HBT_VideoBankHigh - HBlankTemplate + 1
 ENDC
 HBlankCurSrcAddressOffset           EQU HBT_csrc - HBlankTemplate + 1
@@ -830,7 +837,7 @@ HBlankSelfmodJumpOffset             EQU HBT_endj - HBlankTemplate
 HBlankDeltaPacketCountOffset        EQU HBT_counter - HBlankTemplate + 1
 HBlankAudioProcAddrOffset           EQU HBT_AudioProcAddr - HBlankTemplate + 1
 HBlankAudioBankLowOffset            EQU HBT_AudioBankLow - HBlankTemplate + 1
-IF DEF(MBC3) == 0
+IF DEF(LONG_BANK)
 HBlankAudioBankHighOffset           EQU HBT_AudioBankHigh - HBlankTemplate + 1
 ENDC
 HBlankAudioProcReturnOffset         EQU HBT_AudioProcReturn - HBlankTemplate
@@ -854,7 +861,7 @@ AudioFrame:
         ldh a,[AudioBankLow]
         inc a
         ldh [AudioBankLow],a
-        IF DEF(MBC3) == 0
+        IF DEF(LONG_BANK)
         jr nz,AudioProcReturn
         ldh a,[AudioBankHigh]
         inc a
