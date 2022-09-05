@@ -65,18 +65,16 @@ ENDC
         SECTION "hram", HRAM
         
 Cycle:                        DS 1
-FrameFlag:                    DS 1
 BankswitchPending:            DS 1      ; compressed metaframes only
 PulldownCounter:              DS 1
 CompressedFlagSaved:          DS 1
+Trampoline:                   DS 3
 
 DEF HBlankEntry         EQUS "(HBlank+HBlankEntryOffset)"
 DEF CurVideoBankLow     EQUS "(HBlank+HBlankCurVideoBankLowOffset)"
 IF DEF(LONG_BANK)
 DEF CurVideoBankHigh    EQUS "(HBlank+HBlankCurVideoBankHighOffset)"
 ENDC
-DEF CurSrcAddr          EQUS "(HBlank+HBlankCurSrcAddressOffset)"
-DEF CurDestAddr         EQUS "(HBlank+HBlankCurDestAddressOffset)"
 DEF HBlankSCY           EQUS "(HBlank+HBlankSCYOffset)"
 DEF CompressedFlag      EQUS "(HBlank+HBlankCompressedFlagOffset)"
 DEF HBlankSelfmodJump   EQUS "(HBlank+HBlankSelfmodJumpOffset)"
@@ -189,6 +187,9 @@ Initialize:
         ld bc,HBT_end - HBlankTemplate    ; Copy the HBlank procedure in HRAM
         call Copy                         ; as it is self-modifying
         
+        ld a,$C3
+        ldh [Trampoline],a
+        
         ld a,$FF
         ld bc,16
         ld hl,$8BF0
@@ -222,15 +223,10 @@ Initialize:
         
         ld bc,4                         ; Skip the second metaframe header
         add hl,bc                       ; (it must be 0,0,0,0)
-        ld a,l
-        ldh [CurSrcAddr],a
-        ld a,h
-        ldh [CurSrcAddr+1],a            ; Initialize the src address
-        
-        xor a
-        ldh [CurDestAddr],a
-        ld a,$8C
-        ldh [CurDestAddr+1],a           ; Initialize the dest address
+        ld d,h
+        ld e,l                          ; Keep the src address in DE
+        ld hl,$8C00                     ; Initialize the dest address in HL
+        ld bc,$4000                     ; Load the sound address in BC
         
         ld a,LOW(FIRST_VIDEO_BANK)
         ldh [CurVideoBankLow],a
@@ -288,26 +284,9 @@ Initialize:
         xor a                   ; Clear the interrupt flag (no spurious
         ldh [$0F],a             ; interrupts please)
         
-        ld hl,CurSrcAddr
-        ld a,[hl+]
-        ld d,[hl]
-        ld e,a
-        ld hl,CurDestAddr
-        ld a,[hl+]
-        ld h,[hl]
-        ld l,a
-        ld bc,$4000
-        
         ei                      ; Interrupts on!
 
 .l2:    jr .l2
-        
-        ld a,e
-        or d
-        jr nz,.l2
-        di
-.stop:  halt
-        jr .stop
         
         
         
@@ -326,28 +305,11 @@ NextBank:
         ret
         
         
-        
-VBlank: ;push af
-        ;push bc
-        ;push de
-        ;push hl
-        
-        ld a,TIMER_COUNTER_INIT
+
+VBlank: ld a,TIMER_COUNTER_INIT
         ldh [$05],a
         ldh [$06],a
         ei
-        
-        ld a,l
-        ldh [CurDestAddr],a
-        ld a,h
-        ldh [CurDestAddr+1],a
-        ld hl,CurSrcAddr
-        ld a,e
-        ld [hl+],a
-        ld [hl],d
-        
-        ld a,1                      ; Tell the main thread that a frame
-        ldh [FrameFlag],a           ; has passed
         
         ldh a,[PulldownCounter]
         add PULLDOWN_SKIPF
@@ -359,40 +321,29 @@ VBlank: ;push af
         cp F_COMPRESSED             ; If this frame is compressed, go to the
         jp z,.vbl_compression       ; decompression code
         
-        ld hl,CurDestAddr
-        ld a,[hl+]
-        ld e,a
-        ld d,[hl]                   ; Load destination address
-        
-        ld l,(CurSrcAddr+1) & $FF
-        ld a,[hl-]
+        ld a,d
         cp ($8000 - BYTES_PER_VBLANK) >> 8
-        jr c,.nobsA1
+        jr c,.nobsA
         jr nz,.bsA
-        ld a,[hl+]
-        cp ($8000 - BYTES_PER_VBLANK) & $FF
-        jr c,.nobsA2
-        jr z,.nobsA2
+        ld a,($8000 - BYTES_PER_VBLANK) & $FF
+        cp e
+        jr nc,.nobsA
 .bsA:   call NextBank
-        ld hl,$4000
-        jr .bseA
-.nobsA2:ld a,[hl-]
-.nobsA1:ld l,[hl]                   ; Load source address or bankswitch
-        ld h,a                      ; if not enough bytes in this bank
+        ld de,$4000
         
-.bseA:  
+.nobsA: 
         REPT BYTES_PER_VBLANK / 4
-        ld a,[hl+]
-        ld [de],a
+        ld a,[de]
+        ld [hl+],a
         inc e
-        ld a,[hl+]
-        ld [de],a
+        ld a,[de]
+        ld [hl+],a
         inc e
-        ld a,[hl+]
-        ld [de],a
+        ld a,[de]
+        ld [hl+],a
         inc e
-        ld a,[hl+]
-        ld [de],a
+        ld a,[de]
+        ld [hl+],a
         inc de                      ; Copy the uncompressed block via
         ENDR                        ; unrolled loop
         
@@ -406,118 +357,31 @@ VBlank: ;push af
         ldh a,[Cycle]
         dec a
         ldh [Cycle],a
-        jr nz,.no_nextcycle
+        jp z,.nextcycle_defer_bank_sw
         
-        ldh a,[BankswitchPending]
-        and a
-        jr z,.nextcycle
-        
-        call NextBank
-        ld hl,$4000
-        jr .nextcycle
-        
-.no_nextcycle:
-        ld a,h
+        ld a,d
         cp ($8000 - 144*BYTES_PER_HLINE) >> 8
-        ld a,l
         jr c,.nobsB
         jr nz,.bsB
-        cp ($8000 - 144*BYTES_PER_HLINE) & $FF
-        jr c,.nobsB
-        jr z,.nobsB
+        ld a,($8000 - 144*BYTES_PER_HLINE) & $FF
+        cp e
+        jr nc,.nobsB
 .bsB:   call NextBank
-        ld hl,$4000
-.nobsB: ld a,l
-        ldh [CurSrcAddr],a
-        ld a,h
-        ldh [CurSrcAddr+1],a
+        ld de,$4000
         
-        ldh a,[Cycle]
+.nobsB: ldh a,[Cycle]
         rra
         jr c,.nochgpal
         ld a,$F0
         ldh [$47],a
 
-.nochgpal:        
-        ld hl,CurDestAddr
-        ld a,e
-        ld [hl+],a
-        ld [hl],d
-        jp .vblank_exit
-        
-        
-        ; Reset the addresses for the next 4 frame upload cycle
-        ; HL = source address for next metaframe
-.nextcycle:
-        ld a,[hl+]                ; Read stop flag
-        and a
-        jr nz,.end_video          ; Stop flag != 0 => end the video
-        ld a,[hl+]                ; Read compression flag
-        ldh [CompressedFlag],a
-        ldh [CompressedFlagSaved],a
-        ld a,[hl+]
-        ldh [BankswitchPending],a
-        inc hl
-        
-        ldh a,[CompressedFlag]
-        cp $18
-        jr nz,.nc_nofirstcompressedpacket
-        
-        ld a,[hl+]
-        ldh [DeltaPacketCount],a
-        ld a,[hl+]
-        ldh [BankswitchPending],a
-        inc hl
-        inc hl
-        
-.nc_nofirstcompressedpacket:
-        ld a,l
-        ldh [CurSrcAddr],a
-        ld a,h
-        ldh [CurSrcAddr+1],a
-        
-        ld hl,CurDestAddr
-        xor a
-        ld [hl+],a
-        ld a,[hl]
-        cp $8C
-        sbc a
-        and $0C
-        or $80
-        ld [hl],a
-        
-        ld a,$CC
-        ldh [$47],a
-        ld hl,$FF40
-        ld a,$18
-        xor [hl]
-        ld [hl],a
-        
-        ld a,4
-        ldh [Cycle],a
-        
-        jp .vblank_exit
-        
-.end_video:
-        xor a
-        ldh [CurSrcAddr], a         ; Set the src address to zero so that we'll
-        ldh [CurSrcAddr+1], a       ; remember that we stopped
-        
-        ldh [DeltaPacketCount], a   ; When compression is enabled and the delta
-        ld a,F_COMPRESSED           ; packet count is zero, the HBlank thread
-        ldh [CompressedFlag], a     ; is idle
-        ldh [CompressedFlagSaved], a
-        
+.nochgpal:
         jp .vblank_exit
         
         
 .vbl_compression:
-        ld hl,CurSrcAddr
-        ld a,[hl+]
-        ld e,a
-        ld d,[hl]                   ; Read the last source address in DE
-        
-        or d                        ; Destination address == 0
+        ld a,d
+        or e                        ; Source address == 0
         jp z,.video_ended           ; => video has already ended!
         
         ldh a,[BankswitchPending]
@@ -528,41 +392,38 @@ VBlank: ;push af
         ld de,$4000
 
 .c_nextpacket:
-        ld a,[de]
         inc e
-        inc a
-        ld l,a              ; Read the packet count in the block head
         ld a,[de]
-        ldh [BankswitchPending],a
-        inc e               ; Read the bankswitch flag in the block head
+        ldh [BankswitchPending],a ; Read the bankswitch flag in the block head
+        dec e
+        ld a,[de]           ; Read the packet count in the block head
+        inc e
+        inc e
         inc e
         inc de              ; Skip the rest of the block head
         
-        dec l
-        jp z,.c_end2         ; Empty block, skip everyting
+        and a
+        jp z,.c_end         ; Empty block, skip everyting
         
+        push de
+        ld e,a
         ld a,PACKETS_PER_VBLK
-        sub l
+        sub e
         swap a
-        ld h,a
+        ld d,a
         and $F0
         add LOW(.c_copy)
-        ld l,a
-        ld a,h
+        ldh [Trampoline+1],a
+        ld a,d
         jr nc,.c_nocarry
         inc a
 .c_nocarry:
         and $0F
         add HIGH(.c_copy)
-        ld h,a
-        push hl
-
-        ld hl,CurDestAddr
-        ld a,[hl+]
-        ld h,[hl]
-        ld l,a               ; Load the destination address
+        ldh [Trampoline+2],a
+        pop de
         
-        ret                  ; jump inside the copy unrolled loop
+        jp Trampoline
 .c_copy:
         REPT PACKETS_PER_VBLK
         ld a,[de]
@@ -582,14 +443,7 @@ VBlank: ;push af
         inc de          
         ENDR        ; 16 bytes per iteration!
         
-.c_end:
-        ld a,l
-        ldh [CurDestAddr],a
-        ld a,h
-        ldh [CurDestAddr+1],a
-        
-.c_end2:
-        ld a,SCY_OFFSET
+.c_end: ld a,SCY_OFFSET
         ldh [$42],a
         dec a
         ldh [HBlankSCY],a
@@ -598,20 +452,16 @@ VBlank: ;push af
         
         ldh a,[BankswitchPending]
         and a
-        jr z,.c_nobankswitch2
+        jr z,.c_nonextbank
         
         call NextBank
         ld de,$4000
         
-.c_nobankswitch2:
+.c_nonextbank:
         ldh a,[Cycle]
         dec a
         ldh [Cycle],a
-        jr nz,.c_nonextcycle
-        
-        ld h,d
-        ld l,e
-        jp .nextcycle
+        jr z,.nextcycle
         
 .c_nonextcycle:
         rra
@@ -629,10 +479,76 @@ VBlank: ;push af
         inc e
         inc de
         
-        ld hl,CurSrcAddr
-        ld a,e
-        ld [hl+],a
-        ld [hl],d        
+        jp .vblank_exit
+        
+        
+.nextcycle_defer_bank_sw:
+        ldh a,[BankswitchPending]
+        and a
+        jr z,.nextcycle
+        
+        call NextBank
+        ld de,$4000
+        
+        ; Reset the addresses for the next 4 frame upload cycle
+        ; HL = source address for next metaframe
+.nextcycle:
+        ld a,[de]                 ; Read stop flag
+        and a
+        jr nz,.end_video          ; Stop flag != 0 => end the video
+        inc e
+        ld a,[de]                 ; Read compression flag
+        ldh [CompressedFlag],a
+        ldh [CompressedFlagSaved],a
+        inc e
+        ld a,[de]
+        ldh [BankswitchPending],a
+        inc e
+        inc de
+        
+        ldh a,[CompressedFlag]
+        cp F_COMPRESSED
+        jr nz,.nc_nofirstcompressedpacket
+        
+        ld a,[de]
+        inc e
+        ldh [DeltaPacketCount],a
+        ld a,[de]
+        inc e
+        ldh [BankswitchPending],a
+        inc e
+        inc de
+        
+.nc_nofirstcompressedpacket:
+        ld l,0
+        ld a,h
+        cp $8C
+        sbc a
+        and $0C
+        or $80
+        ld h,a
+        
+        ld a,$CC
+        ldh [$47],a
+        ldh a,[$40]
+        xor $18
+        ldh [$40],a
+        
+        ld a,4
+        ldh [Cycle],a
+        
+        jp .vblank_exit
+        
+.end_video:
+        ld de,0                     ; Set the src address to zero so that we'll
+                                    ; remember that we stopped
+        ld bc,Silence               ; Set sound playback address to a zeroed area
+        
+        xor a
+        ldh [DeltaPacketCount], a   ; When compression is enabled and the delta
+        ld a,F_COMPRESSED           ; packet count is zero, the HBlank thread
+        ldh [CompressedFlag], a     ; is idle
+        ldh [CompressedFlagSaved], a
         
         jp .vblank_exit
         
@@ -663,27 +579,14 @@ VBlank: ;push af
         ldh [HBlankSelfmodJump],a
         
 .vblank_exit:
-        ld hl,$FF44
-        xor a
 .ly_zero_wait:
-        cp [hl]
+        ldh a,[$44]
+        and a
         jr nz,.ly_zero_wait
         inc a
         ldh [$06],a                 ;Disable the frickin' timer!!
         ldh [$05],a
-
-        ld hl,CurSrcAddr
-        ld a,[hl+]
-        ld d,[hl]
-        ld e,a
-        ld hl,CurDestAddr
-        ld a,[hl+]
-        ld h,[hl]
-        ld l,a
-        ;pop hl
-        ;pop de
-        ;pop bc
-        ;pop af
+        
         jp TimerEntry
         
         
@@ -723,12 +626,7 @@ HBT_counter:                ; CompressionPacketCount - 1
         ld [hl+],a
         inc de
         
-HBT_commend:
-        ;ld a,l
-        ;ldh [CurDestAddr],a
-        ;ld a,h
-        ;ldh [CurDestAddr+1],a
-        
+HBT_commend:  
 HBT_endj:                 ; HBlankSelfmodJump
         jr HBT_end_noscroll           ; This offset must be $18
         ldh [$05],a
@@ -778,12 +676,6 @@ HBT_VideoBankHigh:
         reti
         
 HBT_Entry:
-        
-;HBT_csrc:                 ; CurSrcAddr - 1
-        ;ld de,60000
-;HBT_cdest:                ; CurDestAddr - 1
-;        ld hl,60000
-        
 HBT_scy:                  ; HBlankSCY - 1
         ld a,SCY_OFFSET-1
         ldh [$42],a
@@ -816,10 +708,6 @@ HBT_notcompr:
         ENDC
         
         jr HBT_commend
-HBT_csrc:                 ; CurSrcAddr - 1
-        ld de,60000
-HBT_cdest:                ; CurDestAddr - 1
-        ld hl,60000
 HBT_end:
         
         
@@ -829,8 +717,6 @@ HBlankCurVideoBankLowOffset         EQU HBT_VideoBankLow - HBlankTemplate + 1
 IF DEF(LONG_BANK)
 HBlankCurVideoBankHighOffset        EQU HBT_VideoBankHigh - HBlankTemplate + 1
 ENDC
-HBlankCurSrcAddressOffset           EQU HBT_csrc - HBlankTemplate + 1
-HBlankCurDestAddressOffset          EQU HBT_cdest - HBlankTemplate + 1
 HBlankSCYOffset                     EQU HBT_scy - HBlankTemplate + 1
 HBlankCompressedFlagOffset          EQU HBT_cjmp - HBlankTemplate
 HBlankSelfmodJumpOffset             EQU HBT_endj - HBlankTemplate
@@ -845,7 +731,7 @@ HBlankTimerEntryOffset              EQU HBT_TimerEntry - HBlankTemplate
 
 
         SECTION "video_engine", HRAM[$FFFE-RealHBlankProcSize]
-    
+
 HBlank:                 DS RealHBlankProcSize
         
 
