@@ -12,7 +12,7 @@ Of course this is yet another implementation of a Bad Apple demo for the
 GameBoy -- hopefully a sufficiently unique one as at least three have been
 developed at the time I am writing this (two for DMG, and one for CGB).
 
-You can download a pre-built ROM from the downloads section.
+You can download pre-built ROMs from the downloads section.
 
 ## History
 
@@ -25,7 +25,7 @@ works perfectly without changes, so I finally can release this!
 
 ### Variants
 
-Two other branches in the repo contain older versions which work slightly
+Three other branches in the repo contain older versions which work slightly
 differently:
 
 - `chiptune_snd` does not have the 3-bit stereo sampled sound, it uses
@@ -35,6 +35,8 @@ differently:
   The code of this version is much less messy and it could be integrated in a
   game with relative ease. The latest version intentionally doesn't save
   CPU register state in interrupts, so the main thread is off limits.
+  
+- `no_snd` doesn't have any sound playback facilities.
   
 - `sampled_snd_4bit` is an experimental version that uses the wave channel
   (channel 3) for sound playback. However it doesn't work very well.
@@ -100,13 +102,19 @@ of bytes to skip before copying the 3 following bytes.
 
 Since the VRAM upload kernel writes over the previous frame pair -- not the
 one currently displayed -- the difference skips one frame pair, making it
-suboptimal. However it still decreases ROM size considerably.
+suboptimal. However it still decreases ROM size considerably. Since it is
+always possible to fallback to a full frame pair transfer, the compression is
+fully lossless.
 
-The entire Bad Apple video is just 2.7 MB of data. The audio is almost exactly
-2 MB, so that 0.7 MB of video data is what bumps the ROM size to 8 MB.
-The player also supports reducing the frame rate by an arbitrary (possibly
-fractional) amount to allow the ROM size to get under 4 MB, however at that
-point it's not 30 FPS anymore, which makes it less impressive...
+The entire Bad Apple video frame data is just 2.7 MB, while the audio alone is
+almost exactly 2 MB, totaling 4.7MB. There is just 0.7 MB of video data which
+bumps the ROM size to 8 MB, a fact that bothers me a little...
+To allow for smaller ROMs, the player also supports:
+- reducing the frame rate by an arbitrary (possibly fractional) amount
+- reducing the resolution, with two possible configurations (in addition to the
+  default 160x72): 160x64 and 160x56. *Note:* only 160x72 is tested for the
+  version with audio at the moment.
+However with smaller video and less frames per second it's less impressive...
 
 ## TODO list
 
