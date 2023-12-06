@@ -2,6 +2,10 @@
 
 **GameBoy 30 FPS 160x72 (stretched) B/W Video Player**
 
+<p align="center">
+<img src="screenshots/cgb_screenshot.jpeg" width=300pt style="text-align: center;">
+</p>
+
 This is a video player for the GameBoy (DMG, CGB and AGB) which is able to play
 several minutes of black and white video with a maximum resolution of 160x72
 (stretched vertically to fill the screen), streamed from the cartridge.
