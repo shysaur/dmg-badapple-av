@@ -12,7 +12,10 @@ Of course this is yet another implementation of a Bad Apple demo for the
 GameBoy -- hopefully a sufficiently unique one as at least three have been
 developed at the time I am writing this (two for DMG, and one for CGB).
 
-You can download pre-built ROMs from the downloads section.
+### [Download Here!](https://github.com/shysaur/dmg-badapple-av/releases/download/release_1.0.0/badapple-av_30fps_72p_3bitsnd.gb)
+
+You can download more (smaller) pre-built ROMs from the
+[releases section](https://github.com/shysaur/dmg-badapple-av/releases).
 
 ## History
 
